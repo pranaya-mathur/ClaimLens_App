@@ -4,8 +4,10 @@ import json
 import re
 import logging
 import hashlib
+import signal
 from typing import Optional, Tuple, Dict, Any
 from pathlib import Path
+from contextlib import contextmanager
 
 from pydantic import ValidationError
 from .config import settings
@@ -18,7 +20,6 @@ except Exception:
     ChatGroq = None
 
 logger = logging.getLogger("claimlens.evaluator")
-logging.basicConfig(level=logging.INFO)
 
 # Module-level flags / caches
 _groq_disabled: bool = False
@@ -27,6 +28,35 @@ _llm_client = None
 # Simple on-disk cache to avoid repeated LLM calls for same narrative
 CACHE_FILE = settings.DATA_DIR / "llm_cache.json"
 _CACHE: Dict[str, Dict[str, Any]] = {}
+
+
+class TimeoutException(Exception):
+    """Custom exception for timeout"""
+    pass
+
+
+@contextmanager
+def timeout_context(seconds: float):
+    """
+    Context manager for timeout enforcement (Unix only).
+    Falls back to no timeout on Windows.
+    """
+    def timeout_handler(signum, frame):
+        raise TimeoutException(f"Operation timed out after {seconds} seconds")
+    
+    # Check if signal.alarm is available (Unix only)
+    if hasattr(signal, 'SIGALRM'):
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(int(seconds))
+        try:
+            yield
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
+    else:
+        # Windows - no timeout enforcement
+        logger.warning("Timeout not supported on this platform")
+        yield
 
 
 def _load_cache():
@@ -38,7 +68,7 @@ def _load_cache():
         else:
             _CACHE = {}
     except Exception as e:
-        logger.warning("Failed to load cache: %s", e)
+        logger.warning(f"Failed to load cache: {e}")
         _CACHE = {}
 
 
@@ -48,10 +78,11 @@ def _save_cache():
         with CACHE_FILE.open("w", encoding="utf-8") as f:
             json.dump(_CACHE, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        logger.warning("Failed to save cache: %s", e)
+        logger.warning(f"Failed to save cache: {e}")
 
 
 def _narr_hash(narr: str) -> str:
+    """Generate hash of narrative for caching"""
     h = hashlib.sha256()
     h.update((narr or "").encode("utf-8"))
     return h.hexdigest()
@@ -155,18 +186,27 @@ def get_llm_client():
     if ChatGroq is None:
         raise RuntimeError("langchain_groq (ChatGroq) is not installed in this environment")
 
-    _llm_client = ChatGroq(model=settings.GROQ_MODEL, temperature=0)
+    _llm_client = ChatGroq(model=settings.GROQ_MODEL, temperature=0, timeout=settings.LLM_TIMEOUT)
     return _llm_client
 
 
-def invoke_llm(prompt: str):
+def invoke_llm(prompt: str, timeout: Optional[float] = None):
     """
-    Call the LLM client and return raw content (dict or str).
-    Caller is responsible for executing this inside a thread/timeout if needed.
+    Call the LLM client with timeout enforcement and return raw content (dict or str).
     """
     client = get_llm_client()
-    resp = client.invoke(prompt)
-    return getattr(resp, "content", resp)
+    
+    if timeout and timeout > 0:
+        try:
+            with timeout_context(timeout):
+                resp = client.invoke(prompt)
+                return getattr(resp, "content", resp)
+        except TimeoutException as e:
+            logger.warning(f"LLM call timed out: {e}")
+            raise
+    else:
+        resp = client.invoke(prompt)
+        return getattr(resp, "content", resp)
 
 
 def parse_and_validate(candidate: Any) -> Tuple[Optional[dict], Optional[str]]:
@@ -199,7 +239,7 @@ def parse_and_validate(candidate: Any) -> Tuple[Optional[dict], Optional[str]]:
 
 def evaluate_claim(claim: dict, llm_timeout: Optional[float] = None) -> dict:
     """
-    Evaluate one claim dictionary.
+    Evaluate one claim dictionary with proper timeout enforcement.
 
     Expected claim shape: {"claim_id": str, "narrative": str, "metadata": {...}}
 
@@ -207,13 +247,11 @@ def evaluate_claim(claim: dict, llm_timeout: Optional[float] = None) -> dict:
       - sanitize narrative
       - check cache (if enabled)
       - build compact prompt
-      - try LLM (if enabled) -> parse -> validate
+      - try LLM (if enabled) with timeout -> parse -> validate
       - on LLM failure or invalid parse/validation -> use local_fallback
       - return a record dict containing outputs, errors and meta information
-
-    Note: timeout for LLM calls should be enforced by the caller (API layer) via threads/futures.
     """
-    global _groq_disabled  # must be declared before assignment in function
+    global _groq_disabled
 
     cid = claim.get("claim_id")
     narr_raw = claim.get("narrative", "")
@@ -251,7 +289,9 @@ def evaluate_claim(claim: dict, llm_timeout: Optional[float] = None) -> dict:
                 "Keep explanations concise (1-2 short sentences). If unsure return 0 for numeric fields and [] for red_flags."
             )
 
-            raw = invoke_llm(prompt)
+            # Use timeout from parameter or settings
+            timeout_val = llm_timeout or settings.LLM_TIMEOUT
+            raw = invoke_llm(prompt, timeout=timeout_val)
 
             if isinstance(raw, dict):
                 parsed_candidate = raw
@@ -260,10 +300,15 @@ def evaluate_claim(claim: dict, llm_timeout: Optional[float] = None) -> dict:
             else:
                 parsed_candidate = None
 
+        except TimeoutException as e:
+            rec["errors"].append(f"llm_timeout_error:{e}")
+            logger.warning(f"LLM timeout for {cid}: {e}")
+            parsed_candidate = None
+            
         except Exception as e:
             msg = str(e).lower()
             rec["errors"].append(f"llm_call_error:{e}")
-            logger.warning("LLM call error for %s: %s", cid, e)
+            logger.warning(f"LLM call error for {cid}: {e}")
 
             # If this looks like a rate-limit / token-limit error, disable Groq for remainder of run
             if ("rate limit" in msg) or ("tokens per day" in msg) or ("429" in msg) or ("token limit" in msg):
@@ -283,7 +328,7 @@ def evaluate_claim(claim: dict, llm_timeout: Optional[float] = None) -> dict:
             _CACHE[narr_h] = validated
             _save_cache()
         except Exception as e:
-            logger.warning("Failed to save cache entry: %s", e)
+            logger.warning(f"Failed to save cache entry: {e}")
     else:
         # Only append a validation error if we attempted to call the LLM.
         if llm_attempted and val_err:
