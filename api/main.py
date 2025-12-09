@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from api.routes import fraud, health
+from api.routes import fraud, health, analytics
 
 
 # Create FastAPI app
@@ -27,6 +27,7 @@ app.add_middleware(
 # Include routers
 app.include_router(health.router, prefix="/health", tags=["Health"])
 app.include_router(fraud.router, prefix="/api/fraud", tags=["Fraud Detection"])
+app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 
 
 @app.on_event("startup")
