@@ -31,30 +31,6 @@ services:
       - redis_data:/data
     command: redis-server --appendonly yes
 
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: claimlens-api
-    ports:
-      - "8000:8000"
-    environment:
-      - NEO4J_URI=bolt://neo4j:7687
-      - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=claimlens123
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    volumes:
-      - ./src:/app/src
-      - ./models:/app/models
-      - ./data:/app/data
-    depends_on:
-      neo4j:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
-
 volumes:
   neo4j_data:
   neo4j_logs:
