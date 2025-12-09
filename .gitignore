@@ -1,71 +1,52 @@
-# Environment variables - NEVER commit these!
-.env
-.env.local
-.env.*.local
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-PIPFILE.lock
-
-# Virtual environments
 venv/
 env/
 ENV/
-env.bak/
-venv.bak/
+.venv
 
-# IDEs
+# Data
+data/raw/*.csv
+data/processed/*.csv
+data/images/**/*.jpg
+data/images/**/*.png
+
+# Models
+models/**/*.pt
+models/**/*.pkl
+models/**/*.h5
+
+# Logs
+logs/
+*.log
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
-.DS_Store
 
-# Testing
-.pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
-.tox/
-.nox/
-
-# Jupyter
-.ipynb_checkpoints
-
-# Data files (may want to keep some)
-*.csv
-*.jsonl
-*.json
-!data/sample*.jsonl
-
-# Logs
-*.log
-logs/
+# Environment
+.env
+.env.local
 
 # Docker
-*.env.docker
+neo4j_data/
+redis_data/
 
 # OS
+.DS_Store
 Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
