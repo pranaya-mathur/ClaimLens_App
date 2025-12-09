@@ -117,11 +117,11 @@ def local_fallback(narr: str) -> Dict[str, Any]:
         score += 0.25
         flags.append("short-narrative")
 
-    if any(x in text for x in ["kuch", "will file", "will file later", "later", "file later"]):
+    if any(x in text for x in ["kuch", "will file", "will file later", "later", "file later", "baad mein"]):
         score += 0.25
         flags.append("delayed-report")
 
-    if any(x in text for x in ["no fir", "no police", "not reported", "didn't report"]):
+    if any(x in text for x in ["no fir", "no police", "not reported", "didn't report", "nahi karwayi"]):
         score += 0.25
         flags.append("no-police-report")
 
@@ -280,13 +280,27 @@ def evaluate_claim(claim: dict, llm_timeout: Optional[float] = None) -> dict:
         try:
             llm_attempted = True
             prompt = (
-                "You are an insurance claim evaluator. RETURN ONLY a single JSON object with EXACT keys:\n"
+                "You are an insurance claim fraud detection expert. Analyze the narrative and RETURN ONLY a JSON object.\n\n"
+                "Required JSON format:\n"
                 '{"clarity":int,"clarity_explanation":str,'
                 '"completeness":int,"completeness_explanation":str,'
                 '"timeline_consistency":int,"timeline_explanation":str,'
                 '"fraud_risk":float,"red_flags":list,"fraud_explanation":str}\n\n'
-                f"Narrative:\n{narr}\n\n"
-                "Keep explanations concise (1-2 short sentences). If unsure return 0 for numeric fields and [] for red_flags."
+                "IMPORTANT - RED FLAGS to check (add to red_flags array if found):\n"
+                "- \"delayed-report\" if mentions filing FIR/police report later (\"will file later\", \"baad mein\", \"later\")\n"
+                "- \"no-police-report\" if states no police report filed (\"no FIR\", \"no police\", \"nahi karwayi\")\n"
+                "- \"vague-details\" if narrative lacks specific information\n"
+                "- \"short-narrative\" if description is unusually brief (under 50 characters)\n"
+                "- \"inconsistent-timeline\" if events don't follow logical sequence\n"
+                "- \"excessive-claim\" if claimed amount seems disproportionate\n"
+                "- \"suspicious-timing\" if incident timing raises questions\n\n"
+                f"Narrative to analyze:\n{narr}\n\n"
+                "Rules:\n"
+                "1. clarity, completeness, timeline_consistency: 0-10 scale\n"
+                "2. fraud_risk: 0.0-1.0 scale (0.0=no risk, 1.0=very high risk)\n"
+                "3. red_flags: array of strings from the list above. MUST add flags if suspicious patterns found\n"
+                "4. If multiple red flags present, fraud_risk should be 0.4 or higher\n"
+                "5. Keep explanations concise (1-2 sentences)\n"
             )
 
             # Use timeout from parameter or settings
