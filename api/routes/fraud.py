@@ -1,11 +1,12 @@
 """
 Fraud Detection API Routes
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict
 from pydantic import BaseModel
 
-from api.main import get_fraud_detector
+from src.fraud_engine.fraud_detector import FraudDetector
+from config.settings import get_settings
 
 
 router = APIRouter()
@@ -24,8 +25,21 @@ class FraudScoreResponse(BaseModel):
     recommendation: str
 
 
+def get_fraud_detector():
+    """Dependency to get fraud detector instance"""
+    settings = get_settings()
+    return FraudDetector(
+        uri=settings.NEO4J_URI,
+        user=settings.NEO4J_USER,
+        password=settings.NEO4J_PASSWORD
+    )
+
+
 @router.post("/score", response_model=FraudScoreResponse)
-def get_fraud_score(request: FraudScoreRequest):
+def get_fraud_score(
+    request: FraudScoreRequest,
+    detector: FraudDetector = Depends(get_fraud_detector)
+):
     """
     Get comprehensive fraud risk score for a claim
     
@@ -34,11 +48,6 @@ def get_fraud_score(request: FraudScoreRequest):
     - Graph analytics (neighbor fraud, document sharing)
     - Claimant history
     """
-    detector = get_fraud_detector()
-    
-    if not detector:
-        raise HTTPException(status_code=503, detail="Fraud detector not available")
-    
     try:
         risk_data = detector.get_graph_risk_score(request.claim_id)
         
@@ -69,16 +78,16 @@ def get_fraud_score(request: FraudScoreRequest):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        detector.close()
 
 
 @router.get("/rings")
-def find_fraud_rings(min_shared_docs: int = 2):
+def find_fraud_rings(
+    min_shared_docs: int = 2,
+    detector: FraudDetector = Depends(get_fraud_detector)
+):
     """Find fraud rings (claimants sharing documents)"""
-    detector = get_fraud_detector()
-    
-    if not detector:
-        raise HTTPException(status_code=503, detail="Fraud detector not available")
-    
     try:
         rings = detector.find_fraud_rings(min_shared_docs=min_shared_docs)
         return {
@@ -87,16 +96,16 @@ def find_fraud_rings(min_shared_docs: int = 2):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        detector.close()
 
 
 @router.get("/serial-fraudsters")
-def find_serial_fraudsters(min_fraud_claims: int = 3):
+def find_serial_fraudsters(
+    min_fraud_claims: int = 3,
+    detector: FraudDetector = Depends(get_fraud_detector)
+):
     """Find claimants with multiple high-fraud claims"""
-    detector = get_fraud_detector()
-    
-    if not detector:
-        raise HTTPException(status_code=503, detail="Fraud detector not available")
-    
     try:
         fraudsters = detector.find_serial_fraudsters(min_fraud_claims=min_fraud_claims)
         return {
@@ -105,16 +114,15 @@ def find_serial_fraudsters(min_fraud_claims: int = 3):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        detector.close()
 
 
 @router.get("/policy-abuse")
-def detect_policy_abuse():
+def detect_policy_abuse(
+    detector: FraudDetector = Depends(get_fraud_detector)
+):
     """Detect new policy + immediate high claim patterns"""
-    detector = get_fraud_detector()
-    
-    if not detector:
-        raise HTTPException(status_code=503, detail="Fraud detector not available")
-    
     try:
         cases = detector.detect_policy_abuse()
         return {
@@ -123,3 +131,5 @@ def detect_policy_abuse():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        detector.close()
