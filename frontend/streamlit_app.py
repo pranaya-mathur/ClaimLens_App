@@ -151,10 +151,10 @@ elif page == "Serial Fraudsters":
                         df = pd.DataFrame(data['fraudsters'])
                         st.dataframe(df, use_container_width=True)
                         
-                        # Visualization
+                        # Visualization - use correct column name
                         fig = px.bar(
                             df.head(20),
-                            x='claimant_id',
+                            x='p.claimant_id',  # Fixed: use actual column name from Neo4j
                             y='total_claimed',
                             title="Top 20 Serial Fraudsters by Amount Claimed"
                         )
