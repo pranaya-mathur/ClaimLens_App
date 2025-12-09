@@ -1,7 +1,18 @@
-fastapi
-uvicorn[standard]
-pydantic
-python-dotenv
-langchain-groq
-pandas
-prometheus-client
+# Core FastAPI
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+python-dotenv==1.0.1
+
+# LLM
+langchain-groq==0.2.1
+langchain-core==0.3.21
+
+# Data processing
+pandas==2.2.3
+
+# Monitoring
+prometheus-client==0.21.0
+
+# Rate limiting
+slowapi==0.1.9
