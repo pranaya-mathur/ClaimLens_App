@@ -3,6 +3,7 @@ Configuration settings for ClaimLens
 """
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -37,9 +38,18 @@ class Settings(BaseSettings):
     MAX_IMAGE_SIZE_MB: int = 10
     BATCH_SIZE: int = 32
     
+    # LLM Configuration (Optional)
+    OPENAI_API_KEY: Optional[str] = None
+    LLM_MODEL: Optional[str] = None
+    
+    # Logging (Optional)
+    LOG_LEVEL: str = "INFO"
+    LOG_FILE: str = "logs/claimlens.log"
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignore extra fields from .env
 
 
 @lru_cache()
