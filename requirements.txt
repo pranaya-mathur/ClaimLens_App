@@ -1,10 +1,56 @@
+# Core FastAPI & Web Framework
 fastapi
+uvicorn[standard]
+gunicorn
 pydantic
 python-dotenv
-langchain-groq
-pandas
-prometheus-client
-gunicorn
-uvicorn[standard]
-networkx[default]
+
+# Database & Graph
 neo4j
+
+# Data Processing & Analysis
+pandas
+numpy
+scikit-learn
+
+# Machine Learning
+xgboost
+catboost
+
+# Deep Learning & Computer Vision
+torch
+torchvision
+opencv-python
+Pillow
+
+# NLP & Transformers
+transformers
+sentence-transformers
+
+# Graph Analytics
+networkx[default]
+
+# Frontend & Visualization
+streamlit
+plotly
+matplotlib
+seaborn
+
+# Monitoring & Logging
+loguru
+prometheus-client
+
+# HTTP & API Clients
+requests
+httpx
+
+# LLM & AI
+langchain
+langchain-groq
+langchain-community
+openai
+
+# Utilities
+python-multipart
+aiofiles
+python-dateutil
