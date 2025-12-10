@@ -4,20 +4,23 @@ Fraud Detection API Routes
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict
 from pydantic import BaseModel
+import os
+from dotenv import load_dotenv
 
 from src.fraud_engine.fraud_detector import FraudDetector
-from config.settings import get_settings
 
+# Load environment variables
+load_dotenv()
 
 router = APIRouter()
 
 
 class FraudScoreRequest(BaseModel):
-    claim_id: int
+    claim_id: str  # Changed from int to str for live ingestion compatibility
 
 
 class FraudScoreResponse(BaseModel):
-    claim_id: int
+    claim_id: str  # Changed from int to str
     base_fraud_score: float
     final_risk_score: float
     risk_level: str
@@ -27,11 +30,14 @@ class FraudScoreResponse(BaseModel):
 
 def get_fraud_detector():
     """Dependency to get fraud detector instance"""
-    settings = get_settings()
+    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    neo4j_user = os.getenv("NEO4J_USER", "neo4j")
+    neo4j_password = os.getenv("NEO4J_PASSWORD", "claimlens123")
+    
     return FraudDetector(
-        uri=settings.NEO4J_URI,
-        user=settings.NEO4J_USER,
-        password=settings.NEO4J_PASSWORD
+        uri=neo4j_uri,
+        user=neo4j_user,
+        password=neo4j_password
     )
 
 
