@@ -24,12 +24,22 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     
-    # Model Paths
+    # CV Model Paths (Trained Models)
+    PARTS_MODEL_PATH: str = "models/parts_segmentation/yolo11n_best.pt"
+    DAMAGE_MODEL_PATH: str = "models/damage_detection/yolo11m_best.pt"
+    SEVERITY_MODEL_PATH: str = "models/severity_classification/efficientnet_b0_best.pth"
+    
+    # Legacy Model Paths (for backward compatibility)
     DAMAGE_DETECTOR_PATH: str = "models/cv_models/damage_detector.pt"
     FRAUD_MODEL_PATH: str = "models/ml_models/fraud_xgboost.pkl"
     SCALER_PATH: str = "models/ml_models/scaler.pkl"
     
-    # Thresholds
+    # CV Detection Thresholds
+    PARTS_CONFIDENCE_THRESHOLD: float = 0.25
+    DAMAGE_CONFIDENCE_THRESHOLD: float = 0.25
+    SEVERITY_CONFIDENCE_THRESHOLD: float = 0.5
+    
+    # Fraud Thresholds
     FRAUD_THRESHOLD_HIGH: float = 0.8
     FRAUD_THRESHOLD_MEDIUM: float = 0.5
     AUTO_APPROVE_THRESHOLD: float = 0.3
@@ -37,6 +47,7 @@ class Settings(BaseSettings):
     # Processing
     MAX_IMAGE_SIZE_MB: int = 10
     BATCH_SIZE: int = 32
+    CV_DEVICE: str = "cpu"  # Default to CPU, set to 'cuda' in .env if GPU available
     
     # LLM Configuration (Optional)
     OPENAI_API_KEY: Optional[str] = None

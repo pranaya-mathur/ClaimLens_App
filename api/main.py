@@ -5,13 +5,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from api.routes import fraud, health, analytics, ingest
+from api.routes import fraud, health, analytics, ingest, cv_detection
 
 
 # Create FastAPI app
 app = FastAPI(
     title="ClaimLens API",
-    description="AI-Powered Insurance Fraud Detection",
+    description="AI-Powered Insurance Fraud Detection with Computer Vision",
     version="1.0.0"
 )
 
@@ -29,11 +29,16 @@ app.include_router(health.router, prefix="/health", tags=["Health"])
 app.include_router(fraud.router, prefix="/api/fraud", tags=["Fraud Detection"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 app.include_router(ingest.router, prefix="/api/ingest", tags=["Claim Ingestion"])
+app.include_router(cv_detection.router, prefix="/api/cv", tags=["Computer Vision"])
 
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("🚀 Starting ClaimLens API...")
+    logger.info("  - Fraud Detection: /api/fraud")
+    logger.info("  - Claim Ingestion: /api/ingest")
+    logger.info("  - Computer Vision: /api/cv")
+    logger.info("  - Analytics: /api/analytics")
     logger.success("✓ API ready")
 
 
@@ -46,8 +51,15 @@ async def shutdown_event():
 @app.get("/")
 def root():
     return {
-        "message": "ClaimLens API",
+        "message": "ClaimLens API - AI-Powered Insurance Fraud Detection",
         "version": "1.0.0",
         "docs": "/docs",
+        "endpoints": {
+            "computer_vision": "/api/cv",
+            "fraud_detection": "/api/fraud",
+            "claim_ingestion": "/api/ingest",
+            "analytics": "/api/analytics",
+            "health": "/health"
+        },
         "status": "active"
     }

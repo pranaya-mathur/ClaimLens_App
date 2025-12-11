@@ -15,8 +15,9 @@ data/processed/*.csv
 data/images/**/*.jpg
 data/images/**/*.png
 
-# Models
+# Models (exclude trained weights - too large for git)
 models/**/*.pt
+models/**/*.pth
 models/**/*.pkl
 models/**/*.h5
 
