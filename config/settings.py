@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     # Processing
     MAX_IMAGE_SIZE_MB: int = 10
     BATCH_SIZE: int = 32
-    CV_DEVICE: str = "cuda"  # or "cpu"
+    CV_DEVICE: str = "cpu"  # Default to CPU, set to 'cuda' in .env if GPU available
     
     # LLM Configuration (Optional)
     OPENAI_API_KEY: Optional[str] = None
