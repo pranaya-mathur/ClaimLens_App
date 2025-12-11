@@ -6,13 +6,22 @@ from ultralytics import YOLO
 import torch
 import torch.nn as nn
 from torchvision import transforms
-from torchvision.models import efficientnet_b0
 from PIL import Image
 import numpy as np
 import cv2
 from typing import Dict, List, Optional
 from pathlib import Path
 from loguru import logger
+
+# Try timm first (for training compatibility), fallback to torchvision
+try:
+    import timm
+    USE_TIMM = True
+    logger.info("Using timm library for EfficientNet")
+except ImportError:
+    from torchvision.models import efficientnet_b0
+    USE_TIMM = False
+    logger.warning("timm not found, using torchvision (may have compatibility issues)")
 
 
 class DamageDetector:
@@ -94,21 +103,47 @@ class DamageDetector:
         Returns:
             Loaded PyTorch model
         """
-        # Create model with 3 output classes
-        model = efficientnet_b0(pretrained=False)
-        model.classifier[1] = nn.Linear(
-            model.classifier[1].in_features,
-            len(self.SEVERITY_CLASSES)
-        )
+        if USE_TIMM:
+            # Load using timm (matches training)
+            model = timm.create_model(
+                'efficientnet_b0',
+                pretrained=False,
+                num_classes=len(self.SEVERITY_CLASSES)
+            )
+        else:
+            # Fallback to torchvision
+            from torchvision.models import efficientnet_b0
+            model = efficientnet_b0(pretrained=False)
+            model.classifier[1] = nn.Linear(
+                model.classifier[1].in_features,
+                len(self.SEVERITY_CLASSES)
+            )
         
         # Load trained weights
         checkpoint = torch.load(model_path, map_location=self.device)
         
         # Handle different checkpoint formats
-        if 'model_state_dict' in checkpoint:
-            model.load_state_dict(checkpoint['model_state_dict'])
+        if isinstance(checkpoint, dict):
+            if 'model_state_dict' in checkpoint:
+                state_dict = checkpoint['model_state_dict']
+            elif 'state_dict' in checkpoint:
+                state_dict = checkpoint['state_dict']
+            elif 'model' in checkpoint:
+                state_dict = checkpoint['model']
+            else:
+                # Assume the dict itself is the state_dict
+                state_dict = checkpoint
         else:
-            model.load_state_dict(checkpoint)
+            state_dict = checkpoint
+        
+        # Load with strict=False to handle minor mismatches
+        try:
+            model.load_state_dict(state_dict, strict=True)
+            logger.info("Loaded severity model with strict=True")
+        except Exception as e:
+            logger.warning(f"Strict loading failed, trying strict=False: {str(e)[:100]}")
+            model.load_state_dict(state_dict, strict=False)
+            logger.info("Loaded severity model with strict=False (some weights may not match)")
         
         return model
     
