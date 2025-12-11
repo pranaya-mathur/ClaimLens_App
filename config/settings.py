@@ -24,10 +24,14 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     
-    # CV Model Paths (Trained Models)
+    # CV Model Paths - Damage Detection
     PARTS_MODEL_PATH: str = "models/parts_segmentation/yolo11n_best.pt"
     DAMAGE_MODEL_PATH: str = "models/damage_detection/yolo11m_best.pt"
     SEVERITY_MODEL_PATH: str = "models/severity_classification/efficientnet_b0_best.pth"
+    
+    # CV Model Paths - Forgery Detection
+    FORGERY_MODEL_PATH: str = "models/forgery_detector_latest_run.pth"
+    FORGERY_CONFIG_PATH: str = "models/forgery_detector_latest_run_config.json"
     
     # Legacy Model Paths (for backward compatibility)
     DAMAGE_DETECTOR_PATH: str = "models/cv_models/damage_detector.pt"
@@ -38,6 +42,9 @@ class Settings(BaseSettings):
     PARTS_CONFIDENCE_THRESHOLD: float = 0.25
     DAMAGE_CONFIDENCE_THRESHOLD: float = 0.25
     SEVERITY_CONFIDENCE_THRESHOLD: float = 0.5
+    
+    # Forgery Detection Thresholds
+    FORGERY_THRESHOLD: float = 0.55  # Threshold for binary classification
     
     # Fraud Thresholds
     FRAUD_THRESHOLD_HIGH: float = 0.8
