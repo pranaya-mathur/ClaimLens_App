@@ -24,6 +24,7 @@ torchvision
 opencv-python
 Pillow
 ultralytics  # YOLO11 models for parts & damage detection
+timm  # PyTorch Image Models for EfficientNet compatibility
 
 # NLP & Transformers
 transformers
