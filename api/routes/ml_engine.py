@@ -5,6 +5,7 @@ from typing import List, Dict, Optional
 import pandas as pd
 import json
 import io
+import os
 from loguru import logger
 
 from src.ml_engine import MLFraudScorer, FeatureEngineer
@@ -82,18 +83,35 @@ def get_ml_scorer() -> MLFraudScorer:
     global _scorer
     if _scorer is None:
         logger.info("Loading MLFraudScorer...")
+        
+        # BUG #5 FIX: Use environment variables with defaults
+        model_path = os.getenv(
+            "ML_MODEL_PATH",
+            "models/claimlens_catboost_hinglish.cbm"
+        )
+        metadata_path = os.getenv(
+            "ML_METADATA_PATH",
+            "models/claimlens_model_metadata.json"
+        )
+        threshold = float(os.getenv("ML_THRESHOLD", "0.5"))
+        
+        logger.info(f"Model path: {model_path}")
+        logger.info(f"Metadata path: {metadata_path}")
+        logger.info(f"Threshold: {threshold}")
+        
         try:
             _scorer = MLFraudScorer(
-                model_path="models/claimlens_catboost_hinglish.cbm",
-                metadata_path="models/claimlens_model_metadata.json",
-                threshold=0.5
+                model_path=model_path,
+                metadata_path=metadata_path,
+                threshold=threshold
             )
             logger.success("✓ MLFraudScorer loaded successfully")
         except FileNotFoundError as e:
             logger.error(f"Model files not found: {e}")
             raise HTTPException(
                 status_code=503,
-                detail="ML model not available. Please ensure models are downloaded."
+                detail=f"ML model not available at {model_path}. "
+                       f"Please ensure model files exist or set ML_MODEL_PATH environment variable."
             )
         except Exception as e:
             logger.error(f"Failed to load ML scorer: {e}")
@@ -106,8 +124,22 @@ def get_feature_engineer() -> FeatureEngineer:
     global _feature_engineer
     if _feature_engineer is None:
         logger.info("Loading FeatureEngineer...")
+        
+        # BUG #5 FIX: Support custom PCA dimensions and embedding model
+        pca_dims = int(os.getenv("ML_PCA_DIMS", "100"))
+        embedding_model = os.getenv(
+            "ML_EMBEDDING_MODEL",
+            "AkshitaS/bhasha-embed-v0"
+        )
+        
+        logger.info(f"PCA dimensions: {pca_dims}")
+        logger.info(f"Embedding model: {embedding_model}")
+        
         try:
-            _feature_engineer = FeatureEngineer(pca_dims=100)
+            _feature_engineer = FeatureEngineer(
+                pca_dims=pca_dims,
+                model_name=embedding_model
+            )
             logger.success("✓ FeatureEngineer loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load feature engineer: {e}")
@@ -141,7 +173,7 @@ async def score_single_claim(request: ClaimRequest):
         # Convert request to DataFrame
         claim_data = pd.DataFrame([request.dict()])
         
-        # Engineer features (BUG #3 FIX: use keep_ids=True)
+        # Engineer features
         logger.info(f"Engineering features for claim {request.claim_id}")
         features = engineer.engineer_features(claim_data, keep_ids=True)
         
@@ -201,7 +233,7 @@ async def score_with_explanation(request: ClaimRequest):
         scorer = get_ml_scorer()
         engineer = get_feature_engineer()
         
-        # Convert and engineer features (BUG #3 FIX)
+        # Convert and engineer features
         claim_data = pd.DataFrame([request.dict()])
         features = engineer.engineer_features(claim_data, keep_ids=True)
         engineer.validate_no_leakage(features)
@@ -233,7 +265,27 @@ async def score_batch_claims(request: BatchClaimRequest):
     
     Efficient batch processing with feature engineering pipeline.
     Returns aggregated statistics and individual scores.
+    
+    **Limits:**
+    - Maximum batch size: 100 claims
     """
+    # BUG #6 FIX: Add batch size limit
+    MAX_BATCH_SIZE = int(os.getenv("ML_MAX_BATCH_SIZE", "100"))
+    
+    if len(request.claims) > MAX_BATCH_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Batch size exceeds limit. Maximum: {MAX_BATCH_SIZE}, "
+                   f"Received: {len(request.claims)}. "
+                   f"Please split into smaller batches."
+        )
+    
+    if len(request.claims) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Empty batch. Please provide at least one claim."
+        )
+    
     try:
         scorer = get_ml_scorer()
         engineer = get_feature_engineer()
@@ -243,7 +295,7 @@ async def score_batch_claims(request: BatchClaimRequest):
         # Convert to DataFrame
         claims_data = pd.DataFrame([claim.dict() for claim in request.claims])
         
-        # Engineer features for batch (BUG #3 FIX)
+        # Engineer features for batch
         features = engineer.engineer_features(claims_data, keep_ids=True)
         engineer.validate_no_leakage(features)
         
@@ -282,6 +334,9 @@ async def score_batch_claims(request: BatchClaimRequest):
             results=results
         )
     
+    except ValueError as e:
+        logger.error(f"Batch validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Batch scoring error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -339,7 +394,7 @@ async def explain_prediction(request: ClaimRequest):
         scorer = get_ml_scorer()
         engineer = get_feature_engineer()
         
-        # Engineer features (BUG #3 FIX)
+        # Engineer features
         claim_data = pd.DataFrame([request.dict()])
         features = engineer.engineer_features(claim_data, keep_ids=True)
         engineer.validate_no_leakage(features)
@@ -436,7 +491,12 @@ async def ml_health_check():
             "feature_engineer_ready": engineer.pca is not None,
             "model_features": len(scorer.model.feature_names_) if scorer.model else 0,
             "threshold": scorer.threshold,
-            "embedder_model": engineer.model_name
+            "embedder_model": engineer.model_name,
+            "config": {
+                "model_path": os.getenv("ML_MODEL_PATH", "models/claimlens_catboost_hinglish.cbm"),
+                "max_batch_size": int(os.getenv("ML_MAX_BATCH_SIZE", "100")),
+                "pca_dims": int(os.getenv("ML_PCA_DIMS", "100"))
+            }
         }
     
     except Exception as e:
