@@ -1,9 +1,9 @@
 """
-Claim Processor - Product-Aware Routing
-Routes claims to appropriate analysis pipeline based on product type
+Claim Processor - Product-Aware Routing with Smart Fallbacks
+Routes claims to appropriate analysis pipeline and handles missing data gracefully
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from loguru import logger
 
 # Import all analysis engines
@@ -20,7 +20,13 @@ except ImportError as e:
 
 class ClaimProcessor:
     """
-    Main claim processing orchestrator.
+    Main claim processing orchestrator with smart fallback handling.
+    
+    **Smart Fallback System:**
+    - Missing damage photos → Skip damage detection, rely on ML/Graph
+    - Theft/Fire claims → Document-focused analysis
+    - Missing medical docs → Higher scrutiny, fraud ring checks
+    - Any missing data → Graceful degradation, never crash
     
     Routes claims to product-specific analysis pipelines:
     - Motor: DamageDetector + DocumentVerifier + ML + Graph
@@ -29,9 +35,14 @@ class ClaimProcessor:
     - Property: DamageDetector (future) + DocumentVerifier + ML + Graph
     
     All products get ML fraud scoring and graph analysis.
-    Only motor/property get damage detection.
-    Only health gets medical cost analysis.
     """
+    
+    # Subtypes that don't require damage photos
+    NO_DAMAGE_PHOTO_SUBTYPES = {
+        "motor": ["theft", "total_loss", "fire", "vandalism"],
+        "property": ["theft", "fire", "flood"],
+        "health": ["ambulance", "consultation", "diagnostics"],
+    }
     
     def __init__(
         self,
@@ -51,7 +62,7 @@ class ClaimProcessor:
             graph_analyzer: FraudDetector instance (all products)
             health_analyzer: HealthClaimAnalyzer instance (for health)
         """
-        logger.info("Initializing ClaimProcessor...")
+        logger.info("Initializing ClaimProcessor with smart fallback system...")
         
         # Common modules (used by all products)
         self.doc_verifier = doc_verifier
@@ -62,118 +73,104 @@ class ClaimProcessor:
         self.damage_detector = damage_detector  # Motor/Property only
         self.health_analyzer = health_analyzer or HealthClaimAnalyzer()  # Health only
         
-        logger.success("✓ ClaimProcessor ready")
+        logger.success("✓ ClaimProcessor ready with fallback handling")
     
     def process_claim(self, claim_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Route claim to appropriate analysis pipeline based on product type.
+        Route claim to appropriate analysis pipeline with smart fallback.
         
         Args:
             claim_data: Claim data dictionary with at minimum:
                 - product: str (motor/health/life/property)
+                - subtype: str (theft/accident/hospitalization/etc)
                 - claim_id: str
                 - Other fields depending on product
         
         Returns:
-            Complete analysis result dictionary with:
-                - product: str
-                - claim_id: str
-                - document_verification: dict (if available)
-                - product_specific_analysis: dict (motor/health/life)
-                - ml_analysis: dict (if available)
-                - graph_analysis: dict (if available)
-                - scores: dict with component scores
-                - final_score: float (0-1)
-                - risk_level: str (LOW/MEDIUM/HIGH/CRITICAL)
-                - verdict: str (APPROVE/REVIEW/REJECT)
-                - red_flags: list of strings
+            Complete analysis result with graceful degradation for missing data
         """
         product = claim_data.get("product", "").lower()
+        subtype = claim_data.get("subtype", "").lower()
         claim_id = claim_data.get("claim_id", "unknown")
         
-        logger.info(f"Processing {product} claim: {claim_id}")
+        logger.info(f"Processing {product}/{subtype} claim: {claim_id}")
         
         # Initialize result structure
         result = {
             "claim_id": claim_id,
             "product": product,
+            "subtype": subtype,
             "scores": {},
             "red_flags": [],
-            "warnings": []
+            "warnings": [],
+            "fallbacks_used": []  # Track what fallbacks were triggered
         }
         
         # Step 1: Document verification (COMMON - all products)
-        if self.doc_verifier and claim_data.get("documents"):
-            try:
-                doc_results = self._verify_documents(claim_data)
-                result["document_verification"] = doc_results
-                result["scores"]["doc_score"] = doc_results.get("average_confidence", 0.5)
-            except Exception as e:
-                logger.warning(f"Document verification failed: {e}")
-                result["warnings"].append(f"Document verification error: {str(e)}")
-                result["scores"]["doc_score"] = 0.5  # Neutral
-        else:
-            logger.info("Skipping document verification (no docs or verifier unavailable)")
-            result["scores"]["doc_score"] = 0.5  # Neutral
+        doc_result = self._safe_document_verification(claim_data)
+        result["document_verification"] = doc_result["result"]
+        result["scores"]["doc_score"] = doc_result["score"]
+        if doc_result["fallback_used"]:
+            result["fallbacks_used"].append("document_verification")
         
-        # Step 2: Product-specific analysis
+        # Step 2: Product-specific analysis with subtype awareness
         if product == "motor":
-            result["motor_analysis"] = self._analyze_motor_claim(claim_data)
-            result["scores"]["damage_score"] = result["motor_analysis"].get("damage_risk", 0.5)
-            result["red_flags"].extend(result["motor_analysis"].get("red_flags", []))
+            motor_result = self._analyze_motor_claim_safe(claim_data)
+            result["motor_analysis"] = motor_result["result"]
+            result["scores"]["damage_score"] = motor_result["score"]
+            result["red_flags"].extend(motor_result["red_flags"])
+            if motor_result["fallback_used"]:
+                result["fallbacks_used"].append("motor_damage_detection")
         
         elif product == "health":
-            result["health_analysis"] = self._analyze_health_claim(claim_data)
-            result["scores"]["medical_risk"] = result["health_analysis"].get("medical_risk", 0.5)
-            result["scores"]["fraud_ring_risk"] = result["health_analysis"].get("fraud_ring_risk", 0.0)
-            result["red_flags"].extend(result["health_analysis"].get("red_flags", []))
+            health_result = self._analyze_health_claim_safe(claim_data)
+            result["health_analysis"] = health_result["result"]
+            result["scores"]["medical_risk"] = health_result["score"]
+            result["scores"]["fraud_ring_risk"] = health_result.get("fraud_ring_risk", 0.0)
+            result["red_flags"].extend(health_result["red_flags"])
+            if health_result["fallback_used"]:
+                result["fallbacks_used"].append("health_analysis")
         
         elif product == "life":
-            result["life_analysis"] = self._analyze_life_claim(claim_data)
-            result["scores"]["life_risk"] = result["life_analysis"].get("validity_score", 0.5)
-            result["red_flags"].extend(result["life_analysis"].get("red_flags", []))
+            life_result = self._analyze_life_claim_safe(claim_data)
+            result["life_analysis"] = life_result["result"]
+            result["scores"]["life_risk"] = life_result["score"]
+            result["red_flags"].extend(life_result["red_flags"])
+            if life_result["fallback_used"]:
+                result["fallbacks_used"].append("life_verification")
         
         elif product == "property":
-            result["property_analysis"] = self._analyze_property_claim(claim_data)
-            result["scores"]["property_damage_score"] = result["property_analysis"].get("damage_risk", 0.5)
-            result["red_flags"].extend(result["property_analysis"].get("red_flags", []))
+            property_result = self._analyze_property_claim_safe(claim_data)
+            result["property_analysis"] = property_result["result"]
+            result["scores"]["property_damage_score"] = property_result["score"]
+            result["red_flags"].extend(property_result["red_flags"])
+            if property_result["fallback_used"]:
+                result["fallbacks_used"].append("property_damage_detection")
         
         else:
             logger.warning(f"Unknown product type: {product}, using generic analysis")
             result["warnings"].append(f"Unknown product type: {product}")
+            result["scores"]["generic_risk"] = 0.5  # Neutral
         
-        # Step 3: ML fraud scoring (COMMON - all products)
-        if self.ml_scorer:
-            try:
-                ml_result = self._ml_fraud_scoring(claim_data)
-                result["ml_analysis"] = ml_result
-                result["scores"]["ml_fraud_score"] = ml_result.get("fraud_probability", 0.5)
-            except Exception as e:
-                logger.warning(f"ML scoring failed: {e}")
-                result["warnings"].append(f"ML scoring error: {str(e)}")
-                result["scores"]["ml_fraud_score"] = 0.5
-        else:
-            logger.info("Skipping ML scoring (scorer unavailable)")
-            result["scores"]["ml_fraud_score"] = 0.5
+        # Step 3: ML fraud scoring (COMMON - always runs)
+        ml_result = self._safe_ml_scoring(claim_data)
+        result["ml_analysis"] = ml_result["result"]
+        result["scores"]["ml_fraud_score"] = ml_result["score"]
+        if ml_result["fallback_used"]:
+            result["fallbacks_used"].append("ml_scoring")
         
-        # Step 4: Graph analysis (COMMON - all products)
-        if self.graph_analyzer:
-            try:
-                graph_result = self._graph_analysis(claim_data)
-                result["graph_analysis"] = graph_result
-                result["scores"]["graph_risk_score"] = graph_result.get("final_risk_score", 0.5)
-            except Exception as e:
-                logger.warning(f"Graph analysis failed: {e}")
-                result["warnings"].append(f"Graph analysis error: {str(e)}")
-                result["scores"]["graph_risk_score"] = 0.5
-        else:
-            logger.info("Skipping graph analysis (analyzer unavailable)")
-            result["scores"]["graph_risk_score"] = 0.5
+        # Step 4: Graph analysis (COMMON - always runs)
+        graph_result = self._safe_graph_analysis(claim_data)
+        result["graph_analysis"] = graph_result["result"]
+        result["scores"]["graph_risk_score"] = graph_result["score"]
+        if graph_result["fallback_used"]:
+            result["fallbacks_used"].append("graph_analysis")
         
-        # Step 5: Calculate final score with product-specific weights
+        # Step 5: Calculate final score with adaptive weighting
         result["final_score"] = self._calculate_final_score(
             result["scores"], 
-            product
+            product,
+            result["fallbacks_used"]
         )
         
         # Step 6: Categorize risk level
@@ -183,162 +180,295 @@ class ClaimProcessor:
         result["verdict"] = self._generate_verdict(
             result["final_score"], 
             product,
-            result["red_flags"]
+            result["red_flags"],
+            result["fallbacks_used"]
+        )
+        
+        # Add metadata
+        result["processing_notes"] = self._generate_processing_notes(
+            result["fallbacks_used"],
+            result["warnings"]
         )
         
         logger.success(
             f"Claim {claim_id} processed: score={result['final_score']:.2f}, "
-            f"risk={result['risk_level']}, verdict={result['verdict']}"
+            f"risk={result['risk_level']}, verdict={result['verdict']}, "
+            f"fallbacks={len(result['fallbacks_used'])}"
         )
         
         return result
     
-    def _analyze_motor_claim(self, claim_data: Dict) -> Dict:
-        """
-        Analyze motor claim (vehicle damage detection).
+    def _safe_document_verification(self, claim_data: Dict) -> Dict:
+        """Document verification with fallback."""
+        try:
+            if self.doc_verifier and claim_data.get("documents"):
+                # Run actual verification
+                doc_result = self.doc_verifier.verify(claim_data["documents"])
+                return {
+                    "result": doc_result,
+                    "score": doc_result.get("average_confidence", 0.5),
+                    "fallback_used": False
+                }
+        except Exception as e:
+            logger.warning(f"Document verification failed: {e}, using fallback")
         
-        Args:
-            claim_data: Claim data
+        # Fallback: Basic document count check
+        docs = claim_data.get("documents_submitted", "")
+        doc_count = len(docs.split(",")) if docs else 0
         
-        Returns:
-            Motor-specific analysis results
-        """
-        logger.info("Running motor claim analysis...")
-        
-        if not self.damage_detector:
-            logger.warning("DamageDetector not available, skipping motor analysis")
-            return {
-                "error": "DamageDetector not initialized",
-                "damage_risk": 0.5,
-                "red_flags": []
-            }
-        
-        damage_photos = claim_data.get("damage_photos", [])
-        if not damage_photos:
-            logger.warning("No damage photos provided for motor claim")
-            return {
-                "error": "No damage photos provided",
-                "damage_risk": 0.7,  # High risk without photos
-                "red_flags": ["No damage photos submitted for motor claim"]
-            }
-        
-        # Run damage detection (would call actual detector)
-        # For now, return placeholder
         return {
-            "damages_detected": [],
-            "damage_risk": 0.3,
-            "estimated_cost": claim_data.get("claim_amount", 0) * 0.8,
-            "inflation_ratio": 1.2,
-            "red_flags": []
+            "result": {"method": "fallback", "document_count": doc_count},
+            "score": 0.5 if doc_count >= 2 else 0.7,  # Low docs = higher risk
+            "fallback_used": True
         }
     
-    def _analyze_health_claim(self, claim_data: Dict) -> Dict:
-        """
-        Analyze health claim (medical cost benchmarking, fraud rings).
+    def _analyze_motor_claim_safe(self, claim_data: Dict) -> Dict:
+        """Motor analysis with subtype-aware fallback."""
+        subtype = claim_data.get("subtype", "").lower()
         
-        Args:
-            claim_data: Claim data
+        # Check if this subtype needs damage detection
+        needs_damage_detection = subtype not in self.NO_DAMAGE_PHOTO_SUBTYPES.get("motor", [])
         
-        Returns:
-            Health-specific analysis results
-        """
-        logger.info("Running health claim analysis...")
+        if not needs_damage_detection:
+            logger.info(f"Motor subtype '{subtype}' doesn't require damage photos - using document-based analysis")
+            return self._motor_fallback_analysis(claim_data, reason="subtype_no_damage")
         
-        # Use HealthClaimAnalyzer
-        return self.health_analyzer.analyze(claim_data)
+        # Check if damage photos provided
+        damage_photos = claim_data.get("damage_photos", [])
+        if not damage_photos:
+            logger.warning(f"No damage photos for motor/{subtype} claim - using fallback")
+            return self._motor_fallback_analysis(claim_data, reason="missing_photos")
+        
+        # Try damage detection
+        try:
+            if self.damage_detector:
+                # Run actual damage detection
+                damage_result = self.damage_detector.detect_damage(damage_photos[0])
+                return {
+                    "result": damage_result,
+                    "score": damage_result.get("risk_assessment", {}).get("risk_score", 0.3),
+                    "red_flags": damage_result.get("risk_assessment", {}).get("factors", []),
+                    "fallback_used": False
+                }
+        except Exception as e:
+            logger.error(f"Damage detection failed: {e}, using fallback")
+        
+        return self._motor_fallback_analysis(claim_data, reason="detection_failed")
     
-    def _analyze_life_claim(self, claim_data: Dict) -> Dict:
-        """
-        Analyze life claim (death certificate verification, nominee checks).
+    def _motor_fallback_analysis(self, claim_data: Dict, reason: str) -> Dict:
+        """Fallback for motor claims without damage detection."""
+        logger.info(f"Using motor fallback analysis (reason: {reason})")
         
-        Args:
-            claim_data: Claim data
-        
-        Returns:
-            Life-specific analysis results
-        """
-        logger.info("Running life claim analysis...")
-        
-        # Placeholder for life claim analysis
-        # In production, would verify death certificate, check nominee KYC, etc.
+        subtype = claim_data.get("subtype", "").lower()
+        claim_amount = claim_data.get("claim_amount", 0)
+        docs = claim_data.get("documents_submitted", "").lower()
         
         red_flags = []
-        validity_score = 0.2  # Default low risk
+        risk_score = 0.3  # Base risk
         
-        # Check if death certificate provided
+        # Theft-specific checks
+        if subtype == "theft":
+            if "fir" not in docs:
+                red_flags.append("Theft claim missing FIR")
+                risk_score += 0.3
+            if "rc" not in docs:
+                red_flags.append("Missing RC copy for theft claim")
+                risk_score += 0.1
+            if claim_amount > 500000:  # High value theft
+                red_flags.append("High value theft claim requires extra scrutiny")
+                risk_score += 0.2
+        
+        # Fire-specific checks
+        elif subtype == "fire":
+            if "fire_certificate" not in docs and "fir" not in docs:
+                red_flags.append("Fire claim missing fire department certificate or FIR")
+                risk_score += 0.3
+        
+        # Generic checks
+        if not docs:
+            red_flags.append("No supporting documents provided")
+            risk_score += 0.4
+        
+        return {
+            "result": {
+                "method": "fallback",
+                "reason": reason,
+                "subtype_analysis": subtype,
+                "document_based_risk": risk_score
+            },
+            "score": min(risk_score, 1.0),
+            "red_flags": red_flags,
+            "fallback_used": True
+        }
+    
+    def _analyze_health_claim_safe(self, claim_data: Dict) -> Dict:
+        """Health analysis with fallback."""
+        try:
+            result = self.health_analyzer.analyze(claim_data)
+            return {
+                "result": result,
+                "score": result.get("medical_risk", 0.5),
+                "fraud_ring_risk": result.get("fraud_ring_risk", 0.0),
+                "red_flags": result.get("red_flags", []),
+                "fallback_used": False
+            }
+        except Exception as e:
+            logger.error(f"Health analysis failed: {e}, using fallback")
+            return self._health_fallback_analysis(claim_data)
+    
+    def _health_fallback_analysis(self, claim_data: Dict) -> Dict:
+        """Fallback for health claims."""
+        logger.info("Using health fallback analysis")
+        
+        claim_amount = claim_data.get("claim_amount", 0)
         docs = claim_data.get("documents_submitted", "").lower()
+        
+        red_flags = []
+        risk_score = 0.3
+        
+        # Document checks
+        if "hospital" not in docs and "bill" not in docs:
+            red_flags.append("Missing hospital bills")
+            risk_score += 0.3
+        
+        if claim_amount > 100000:  # High value
+            red_flags.append("High value health claim requires manual review")
+            risk_score += 0.2
+        
+        return {
+            "result": {"method": "fallback", "document_based_risk": risk_score},
+            "score": min(risk_score, 1.0),
+            "fraud_ring_risk": 0.0,
+            "red_flags": red_flags,
+            "fallback_used": True
+        }
+    
+    def _analyze_life_claim_safe(self, claim_data: Dict) -> Dict:
+        """Life claim analysis with fallback."""
+        docs = claim_data.get("documents_submitted", "").lower()
+        days_since_policy = claim_data.get("days_since_policy_start", 999)
+        
+        red_flags = []
+        validity_score = 0.2
+        
         if "death" not in docs:
             red_flags.append("Death certificate not provided")
             validity_score += 0.5
         
-        # Check claim timing (suspicious if very recent policy)
-        days_since_policy = claim_data.get("days_since_policy_start", 999)
-        if days_since_policy < 365:  # Less than 1 year
+        if days_since_policy < 365:
             red_flags.append("Life claim within first year of policy (suspicious timing)")
             validity_score += 0.3
         
         return {
-            "validity_score": min(validity_score, 1.0),
-            "death_certificate_verified": "death" in docs,
-            "policy_timing_suspicious": days_since_policy < 365,
-            "red_flags": red_flags
+            "result": {
+                "validity_score": min(validity_score, 1.0),
+                "death_certificate_verified": "death" in docs,
+                "policy_timing_suspicious": days_since_policy < 365
+            },
+            "score": min(validity_score, 1.0),
+            "red_flags": red_flags,
+            "fallback_used": False  # Life claims always use this method
         }
     
-    def _analyze_property_claim(self, claim_data: Dict) -> Dict:
-        """
-        Analyze property claim (property damage, fire/flood detection).
+    def _analyze_property_claim_safe(self, claim_data: Dict) -> Dict:
+        """Property analysis with fallback."""
+        subtype = claim_data.get("subtype", "").lower()
+        damage_photos = claim_data.get("damage_photos", [])
         
-        Args:
-            claim_data: Claim data
+        if subtype in self.NO_DAMAGE_PHOTO_SUBTYPES.get("property", []):
+            logger.info(f"Property subtype '{subtype}' doesn't require damage photos")
+            return self._property_fallback_analysis(claim_data, reason="subtype_no_damage")
         
-        Returns:
-            Property-specific analysis results
-        """
-        logger.info("Running property claim analysis...")
+        if not damage_photos:
+            return self._property_fallback_analysis(claim_data, reason="missing_photos")
         
-        # Placeholder for property damage detection
-        # Would use specialized property damage detector
+        # Placeholder for actual property damage detection
+        return {
+            "result": {"damage_risk": 0.3},
+            "score": 0.3,
+            "red_flags": [],
+            "fallback_used": False
+        }
+    
+    def _property_fallback_analysis(self, claim_data: Dict, reason: str) -> Dict:
+        """Fallback for property claims."""
+        logger.info(f"Using property fallback analysis (reason: {reason})")
+        
+        subtype = claim_data.get("subtype", "").lower()
+        docs = claim_data.get("documents_submitted", "").lower()
+        
+        red_flags = []
+        risk_score = 0.3
+        
+        if subtype == "fire" and "fire_certificate" not in docs:
+            red_flags.append("Fire claim missing fire department certificate")
+            risk_score += 0.3
         
         return {
-            "damage_risk": 0.3,
-            "estimated_loss": claim_data.get("claim_amount", 0) * 0.75,
-            "red_flags": []
+            "result": {"method": "fallback", "document_based_risk": risk_score},
+            "score": min(risk_score, 1.0),
+            "red_flags": red_flags,
+            "fallback_used": True
         }
     
-    def _verify_documents(self, claim_data: Dict) -> Dict:
-        """Document verification (placeholder)."""
-        return {"average_confidence": 0.95}
-    
-    def _ml_fraud_scoring(self, claim_data: Dict) -> Dict:
-        """ML fraud scoring (placeholder)."""
-        return {"fraud_probability": 0.3}
-    
-    def _graph_analysis(self, claim_data: Dict) -> Dict:
-        """Graph fraud analysis (placeholder)."""
-        return {"final_risk_score": 0.25}
-    
-    def _calculate_final_score(self, scores: Dict, product: str) -> float:
-        """
-        Calculate final fraud score with product-specific weights.
+    def _safe_ml_scoring(self, claim_data: Dict) -> Dict:
+        """ML scoring with fallback."""
+        try:
+            if self.ml_scorer:
+                result = self.ml_scorer.score(claim_data)
+                return {
+                    "result": result,
+                    "score": result.get("fraud_probability", 0.5),
+                    "fallback_used": False
+                }
+        except Exception as e:
+            logger.warning(f"ML scoring failed: {e}, using fallback")
         
-        Args:
-            scores: Dictionary of component scores
-            product: Product type
+        return {"result": {"method": "fallback"}, "score": 0.5, "fallback_used": True}
+    
+    def _safe_graph_analysis(self, claim_data: Dict) -> Dict:
+        """Graph analysis with fallback."""
+        try:
+            if self.graph_analyzer:
+                result = self.graph_analyzer.analyze(claim_data)
+                return {
+                    "result": result,
+                    "score": result.get("final_risk_score", 0.5),
+                    "fallback_used": False
+                }
+        except Exception as e:
+            logger.warning(f"Graph analysis failed: {e}, using fallback")
         
-        Returns:
-            Final score (0-1)
-        """
+        return {"result": {"method": "fallback"}, "score": 0.5, "fallback_used": True}
+    
+    def _calculate_final_score(
+        self, 
+        scores: Dict, 
+        product: str,
+        fallbacks_used: List[str]
+    ) -> float:
+        """Calculate final score with adaptive weighting based on available data."""
+        
+        # Adjust weights based on what fallbacks were used
         if product == "motor":
-            # Motor: damage + docs + ML + graph
-            return (
-                0.20 * scores.get("doc_score", 0.5) +
-                0.25 * scores.get("damage_score", 0.5) +
-                0.35 * scores.get("ml_fraud_score", 0.5) +
-                0.20 * scores.get("graph_risk_score", 0.5)
-            )
+            if "motor_damage_detection" in fallbacks_used:
+                # No damage detection → rely more on ML and Graph
+                return (
+                    0.10 * scores.get("doc_score", 0.5) +
+                    0.15 * scores.get("damage_score", 0.5) +
+                    0.45 * scores.get("ml_fraud_score", 0.5) +
+                    0.30 * scores.get("graph_risk_score", 0.5)
+                )
+            else:
+                # Full data available
+                return (
+                    0.20 * scores.get("doc_score", 0.5) +
+                    0.25 * scores.get("damage_score", 0.5) +
+                    0.35 * scores.get("ml_fraud_score", 0.5) +
+                    0.20 * scores.get("graph_risk_score", 0.5)
+                )
         
         elif product == "health":
-            # Health: medical risk + fraud ring + ML + graph
             return (
                 0.15 * scores.get("doc_score", 0.5) +
                 0.25 * scores.get("medical_risk", 0.5) +
@@ -348,7 +478,6 @@ class ClaimProcessor:
             )
         
         elif product == "life":
-            # Life: strict KYC + verification focus
             return (
                 0.40 * scores.get("doc_score", 0.5) +
                 0.20 * scores.get("life_risk", 0.5) +
@@ -356,17 +485,8 @@ class ClaimProcessor:
                 0.15 * scores.get("graph_risk_score", 0.5)
             )
         
-        elif product == "property":
-            # Property: damage + ML + graph
-            return (
-                0.25 * scores.get("doc_score", 0.5) +
-                0.25 * scores.get("property_damage_score", 0.5) +
-                0.30 * scores.get("ml_fraud_score", 0.5) +
-                0.20 * scores.get("graph_risk_score", 0.5)
-            )
-        
         else:
-            # Default: equal weighting
+            # Generic/fallback scoring
             return (
                 0.30 * scores.get("doc_score", 0.5) +
                 0.40 * scores.get("ml_fraud_score", 0.5) +
@@ -374,15 +494,7 @@ class ClaimProcessor:
             )
     
     def _categorize_risk(self, score: float) -> str:
-        """
-        Categorize risk level from score.
-        
-        Args:
-            score: Fraud score (0-1)
-        
-        Returns:
-            Risk level string
-        """
+        """Categorize risk level from score."""
         if score < 0.3:
             return "LOW"
         elif score < 0.5:
@@ -392,28 +504,29 @@ class ClaimProcessor:
         else:
             return "CRITICAL"
     
-    def _generate_verdict(self, score: float, product: str, red_flags: List[str]) -> str:
-        """
-        Generate final verdict.
+    def _generate_verdict(
+        self, 
+        score: float, 
+        product: str, 
+        red_flags: List[str],
+        fallbacks_used: List[str]
+    ) -> str:
+        """Generate verdict with fallback awareness."""
         
-        Args:
-            score: Final fraud score
-            product: Product type
-            red_flags: List of red flags
+        # If many fallbacks used, recommend review
+        if len(fallbacks_used) >= 2:
+            return "REVIEW"  # Too much missing data
         
-        Returns:
-            Verdict string (APPROVE/REVIEW/REJECT)
-        """
         # Strict rules for life claims
         if product == "life" and score > 0.4:
             return "REVIEW"
         
-        # Critical red flags = manual review
+        # Critical red flags
         critical_flags = [
             "death certificate",
             "fraud ring",
             "collusion",
-            "pre-existing condition"
+            "missing fir"
         ]
         
         has_critical_flag = any(
@@ -431,3 +544,25 @@ class ClaimProcessor:
             return "REVIEW"
         else:
             return "REJECT"
+    
+    def _generate_processing_notes(
+        self,
+        fallbacks_used: List[str],
+        warnings: List[str]
+    ) -> str:
+        """Generate human-readable processing notes."""
+        if not fallbacks_used and not warnings:
+            return "Claim processed with full analysis pipeline."
+        
+        notes = []
+        
+        if fallbacks_used:
+            notes.append(
+                f"Fallback methods used for: {', '.join(fallbacks_used)}. "
+                f"Recommendation: Manual review for missing data."
+            )
+        
+        if warnings:
+            notes.append(f"Warnings: {'; '.join(warnings)}")
+        
+        return " ".join(notes)
