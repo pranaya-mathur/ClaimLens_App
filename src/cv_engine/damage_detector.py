@@ -12,6 +12,7 @@ import cv2
 from typing import Dict, List, Optional
 from pathlib import Path
 from loguru import logger
+import os
 
 # Try timm first (for training compatibility), fallback to torchvision
 try:
@@ -47,6 +48,12 @@ class DamageDetector:
     
     SEVERITY_CLASSES = ['minor', 'moderate', 'severe']
     
+    # BUG #7 FIX: Image validation constraints
+    MAX_FILE_SIZE_MB = float(os.getenv("CV_MAX_IMAGE_SIZE_MB", "10"))  # 10MB default
+    MIN_IMAGE_DIM = int(os.getenv("CV_MIN_IMAGE_DIM", "100"))  # 100x100 minimum
+    MAX_IMAGE_DIM = int(os.getenv("CV_MAX_IMAGE_DIM", "5000"))  # 5000x5000 maximum
+    ALLOWED_FORMATS = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp']
+    
     def __init__(
         self,
         parts_model_path: str,
@@ -65,6 +72,12 @@ class DamageDetector:
         """
         self.device = device
         logger.info(f"Initializing DamageDetector on {device}")
+        
+        # BUG #7 FIX: Log validation constraints
+        logger.info(
+            f"Image validation: max_size={self.MAX_FILE_SIZE_MB}MB, "
+            f"dimensions={self.MIN_IMAGE_DIM}-{self.MAX_IMAGE_DIM}px"
+        )
         
         # Load YOLO models
         logger.info("Loading parts segmentation model...")
@@ -92,6 +105,93 @@ class DamageDetector:
         ])
         
         logger.success("✓ All models loaded successfully")
+    
+    def _validate_image(self, image_path: str) -> None:
+        """
+        BUG #7 FIX: Comprehensive image validation.
+        
+        Validates:
+        - File exists
+        - File size within limits
+        - Valid image format
+        - Image dimensions within bounds
+        - Image is not corrupted
+        
+        Args:
+            image_path: Path to image file
+            
+        Raises:
+            FileNotFoundError: If image doesn't exist
+            ValueError: If validation fails
+        """
+        # Check 1: File exists
+        if not Path(image_path).exists():
+            raise FileNotFoundError(f"Image not found: {image_path}")
+        
+        # Check 2: File size
+        file_size_mb = Path(image_path).stat().st_size / (1024 * 1024)
+        if file_size_mb > self.MAX_FILE_SIZE_MB:
+            raise ValueError(
+                f"Image file too large: {file_size_mb:.2f}MB. "
+                f"Maximum allowed: {self.MAX_FILE_SIZE_MB}MB. "
+                f"Please compress or resize the image."
+            )
+        
+        # Check 3: File extension
+        file_ext = Path(image_path).suffix.lower()
+        if file_ext not in self.ALLOWED_FORMATS:
+            raise ValueError(
+                f"Unsupported image format: {file_ext}. "
+                f"Allowed formats: {', '.join(self.ALLOWED_FORMATS)}"
+            )
+        
+        # Check 4: Image can be loaded and is valid
+        try:
+            image = cv2.imread(image_path)
+        except Exception as e:
+            raise ValueError(f"Failed to load image with OpenCV: {str(e)}")
+        
+        if image is None:
+            raise ValueError(
+                f"Invalid or corrupted image file: {image_path}. "
+                f"OpenCV could not decode the image."
+            )
+        
+        # Check 5: Image dimensions
+        height, width = image.shape[:2]
+        
+        if height < self.MIN_IMAGE_DIM or width < self.MIN_IMAGE_DIM:
+            raise ValueError(
+                f"Image too small: {width}x{height}px. "
+                f"Minimum required: {self.MIN_IMAGE_DIM}x{self.MIN_IMAGE_DIM}px. "
+                f"Image is too low resolution for accurate damage detection."
+            )
+        
+        if height > self.MAX_IMAGE_DIM or width > self.MAX_IMAGE_DIM:
+            raise ValueError(
+                f"Image too large: {width}x{height}px. "
+                f"Maximum allowed: {self.MAX_IMAGE_DIM}x{self.MAX_IMAGE_DIM}px. "
+                f"Please resize the image before processing."
+            )
+        
+        # Check 6: Image has valid color channels
+        if len(image.shape) != 3:
+            raise ValueError(
+                f"Invalid image format: Expected 3 color channels (RGB/BGR), "
+                f"got shape {image.shape}. "
+                f"Grayscale or other formats are not supported."
+            )
+        
+        if image.shape[2] != 3:
+            raise ValueError(
+                f"Invalid color channels: Expected 3 channels, got {image.shape[2]}. "
+                f"Only RGB/BGR images are supported."
+            )
+        
+        logger.debug(
+            f"Image validation passed: {width}x{height}px, "
+            f"{file_size_mb:.2f}MB, {file_ext}"
+        )
     
     def _load_severity_model(self, model_path: str) -> nn.Module:
         """
@@ -171,10 +271,17 @@ class DamageDetector:
                 "summary": {...},
                 "risk_assessment": {...}
             }
+            
+        Raises:
+            FileNotFoundError: If image file doesn't exist
+            ValueError: If image validation fails
         """
         logger.info(f"Processing image: {image_path}")
         
-        # Read image
+        # BUG #7 FIX: Validate image before processing
+        self._validate_image(image_path)
+        
+        # Read image (already validated, but keep check for safety)
         image = cv2.imread(image_path)
         if image is None:
             raise ValueError(f"Failed to load image: {image_path}")
