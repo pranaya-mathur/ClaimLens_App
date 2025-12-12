@@ -141,9 +141,9 @@ async def score_single_claim(request: ClaimRequest):
         # Convert request to DataFrame
         claim_data = pd.DataFrame([request.dict()])
         
-        # Engineer features
+        # Engineer features (BUG #3 FIX: use keep_ids=True)
         logger.info(f"Engineering features for claim {request.claim_id}")
-        features = engineer.engineer_features(claim_data, drop_ids=False)
+        features = engineer.engineer_features(claim_data, keep_ids=True)
         
         # Validate no leakage
         engineer.validate_no_leakage(features)
@@ -201,9 +201,9 @@ async def score_with_explanation(request: ClaimRequest):
         scorer = get_ml_scorer()
         engineer = get_feature_engineer()
         
-        # Convert and engineer features
+        # Convert and engineer features (BUG #3 FIX)
         claim_data = pd.DataFrame([request.dict()])
-        features = engineer.engineer_features(claim_data, drop_ids=False)
+        features = engineer.engineer_features(claim_data, keep_ids=True)
         engineer.validate_no_leakage(features)
         
         # Get detailed scoring
@@ -243,8 +243,8 @@ async def score_batch_claims(request: BatchClaimRequest):
         # Convert to DataFrame
         claims_data = pd.DataFrame([claim.dict() for claim in request.claims])
         
-        # Engineer features for batch
-        features = engineer.engineer_features(claims_data, drop_ids=False)
+        # Engineer features for batch (BUG #3 FIX)
+        features = engineer.engineer_features(claims_data, keep_ids=True)
         engineer.validate_no_leakage(features)
         
         # Batch score
@@ -339,9 +339,9 @@ async def explain_prediction(request: ClaimRequest):
         scorer = get_ml_scorer()
         engineer = get_feature_engineer()
         
-        # Engineer features
+        # Engineer features (BUG #3 FIX)
         claim_data = pd.DataFrame([request.dict()])
-        features = engineer.engineer_features(claim_data, drop_ids=False)
+        features = engineer.engineer_features(claim_data, keep_ids=True)
         engineer.validate_no_leakage(features)
         
         # Get explanation
