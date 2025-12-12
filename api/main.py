@@ -5,13 +5,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from api.routes import fraud, health, analytics, ingest, cv_detection
+from api.routes import fraud, health, analytics, ingest, cv_detection, ml_engine
 
 
 # Create FastAPI app
 app = FastAPI(
     title="ClaimLens API",
-    description="AI-Powered Insurance Fraud Detection with Computer Vision",
+    description="AI-Powered Insurance Fraud Detection with Computer Vision & ML",
     version="1.0.0"
 )
 
@@ -30,6 +30,7 @@ app.include_router(fraud.router, prefix="/api/fraud", tags=["Fraud Detection"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 app.include_router(ingest.router, prefix="/api/ingest", tags=["Claim Ingestion"])
 app.include_router(cv_detection.router, prefix="/api/cv", tags=["Computer Vision"])
+app.include_router(ml_engine.router, prefix="/api/ml", tags=["ML Engine"])
 
 
 @app.on_event("startup")
@@ -39,6 +40,7 @@ async def startup_event():
     logger.info("  - Claim Ingestion: /api/ingest")
     logger.info("  - Computer Vision: /api/cv")
     logger.info("  - Analytics: /api/analytics")
+    logger.info("  - ML Engine: /api/ml")
     logger.success("✓ API ready")
 
 
@@ -57,6 +59,7 @@ def root():
         "endpoints": {
             "computer_vision": "/api/cv",
             "fraud_detection": "/api/fraud",
+            "ml_engine": "/api/ml",
             "claim_ingestion": "/api/ingest",
             "analytics": "/api/analytics",
             "health": "/health"
