@@ -5,14 +5,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from api.routes import fraud, health, analytics, ingest, cv_detection, ml_engine
+from api.routes import fraud, health, analytics, ingest, cv_detection, ml_engine, document_verification
+from api.middleware.rate_limiter import RateLimitMiddleware
 
 
 # Create FastAPI app
 app = FastAPI(
     title="ClaimLens API",
-    description="AI-Powered Insurance Fraud Detection with Computer Vision & ML",
-    version="1.0.0"
+    description="AI-Powered Insurance Fraud Detection with Computer Vision, ML & Document Verification",
+    version="2.0.0"
 )
 
 # CORS middleware
@@ -24,6 +25,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Rate limiting middleware (NEW!)
+app.add_middleware(RateLimitMiddleware)
+
 # Include routers
 app.include_router(health.router, prefix="/health", tags=["Health"])
 app.include_router(fraud.router, prefix="/api/fraud", tags=["Fraud Detection"])
@@ -31,16 +35,19 @@ app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"]
 app.include_router(ingest.router, prefix="/api/ingest", tags=["Claim Ingestion"])
 app.include_router(cv_detection.router, prefix="/api/cv", tags=["Computer Vision"])
 app.include_router(ml_engine.router, prefix="/api/ml", tags=["ML Engine"])
+app.include_router(document_verification.router, prefix="/api/documents", tags=["Document Verification"])
 
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("🚀 Starting ClaimLens API...")
+    logger.info("🚀 Starting ClaimLens API v2.0...")
     logger.info("  - Fraud Detection: /api/fraud")
     logger.info("  - Claim Ingestion: /api/ingest")
     logger.info("  - Computer Vision: /api/cv")
-    logger.info("  - Analytics: /api/analytics")
     logger.info("  - ML Engine: /api/ml")
+    logger.info("  - Document Verification: /api/documents ✅ NEW!")
+    logger.info("  - Analytics: /api/analytics")
+    logger.info("  - Rate Limiting: ENABLED (100 req/min)")
     logger.success("✓ API ready")
 
 
@@ -54,15 +61,46 @@ async def shutdown_event():
 def root():
     return {
         "message": "ClaimLens API - AI-Powered Insurance Fraud Detection",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "docs": "/docs",
         "endpoints": {
-            "computer_vision": "/api/cv",
+            "computer_vision": {
+                "base": "/api/cv",
+                "endpoints": [
+                    "/api/cv/detect",
+                    "/api/cv/detect-forgery",
+                    "/api/cv/analyze-complete"
+                ]
+            },
+            "document_verification": {
+                "base": "/api/documents",
+                "endpoints": [
+                    "/api/documents/verify-pan",
+                    "/api/documents/verify-aadhaar",
+                    "/api/documents/verify-document",
+                    "/api/documents/extract-text"
+                ]
+            },
+            "ml_engine": {
+                "base": "/api/ml",
+                "endpoints": [
+                    "/api/ml/score",
+                    "/api/ml/batch",
+                    "/api/ml/explain"
+                ]
+            },
             "fraud_detection": "/api/fraud",
-            "ml_engine": "/api/ml",
             "claim_ingestion": "/api/ingest",
             "analytics": "/api/analytics",
             "health": "/health"
+        },
+        "features": {
+            "smart_fallbacks": "Handles missing data gracefully",
+            "multi_product": "Motor/Health/Life/Property",
+            "fraud_rings": "Hospital/Claimant network detection",
+            "rate_limiting": "100 requests per minute",
+            "document_verification": "PAN/Aadhaar/Generic docs",
+            "ocr_extraction": "Multi-language text extraction"
         },
         "status": "active"
     }
