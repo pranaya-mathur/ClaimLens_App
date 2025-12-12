@@ -10,6 +10,7 @@ from sentence_transformers import SentenceTransformer
 from sklearn.decomposition import PCA
 from typing import Dict, List, Optional
 import warnings
+from loguru import logger
 
 warnings.filterwarnings("ignore")
 
@@ -73,9 +74,9 @@ class FeatureEngineer:
     def _load_embedder(self):
         """Lazy load embedding model."""
         if self.embedder is None:
-            print(f"Loading {self.model_name} embedding model...")
+            logger.info(f"Loading {self.model_name} embedding model...")
             self.embedder = SentenceTransformer(self.model_name)
-            print("Embedder ready!")
+            logger.success("Embedder ready!")
 
     def create_time_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Create time-aware aggregation features without label leakage.
@@ -85,7 +86,32 @@ class FeatureEngineer:
             
         Returns:
             DataFrame with added time-based features
+            
+        Raises:
+            ValueError: If required columns are missing or invalid
         """
+        # BUG #2 FIX: Validate incident_date column exists
+        if "incident_date" not in df.columns:
+            raise ValueError(
+                "Missing required column: 'incident_date'. "
+                "This column is required for time-aware feature engineering."
+            )
+        
+        # BUG #2 FIX: Ensure incident_date is datetime
+        try:
+            df["incident_date"] = pd.to_datetime(df["incident_date"])
+        except Exception as e:
+            raise ValueError(
+                f"Invalid 'incident_date' format. Expected ISO format (YYYY-MM-DD). "
+                f"Error: {str(e)}"
+            )
+        
+        # Check for null dates
+        if df["incident_date"].isna().any():
+            null_count = df["incident_date"].isna().sum()
+            logger.warning(f"Found {null_count} null incident_date values. Filling with today's date.")
+            df["incident_date"] = df["incident_date"].fillna(pd.Timestamp.now())
+        
         df_sorted = df.sort_values("incident_date").reset_index(drop=True)
         
         # Claimant history features
@@ -138,9 +164,11 @@ class FeatureEngineer:
         Returns:
             DataFrame with document presence indicators
         """
+        # BUG #4 FIX: Correctly count documents (0 if empty/None)
         df["num_docs"] = df["documents_submitted"].fillna("").apply(
-            lambda s: 1 + str(s).count(",")
+            lambda s: 1 + str(s).count(",") if str(s).strip() else 0  # FIXED: Returns 0 if empty
         )
+        
         df["has_fir"] = df["documents_submitted"].fillna("").str.contains("FIR", na=False).astype(int)
         df["has_photos"] = df["documents_submitted"].fillna("").str.contains("photos", na=False).astype(int)
         df["has_death_cert"] = (
@@ -164,7 +192,7 @@ class FeatureEngineer:
         """
         self._load_embedder()
         
-        print(f"Generating embeddings for {len(narratives)} narratives...")
+        logger.info(f"Generating embeddings for {len(narratives)} narratives...")
         embeddings = self.embedder.encode(
             narratives,
             batch_size=batch_size,
@@ -172,10 +200,10 @@ class FeatureEngineer:
         )
         
         if not self.is_fitted:
-            print(f"Fitting PCA to reduce to {self.pca_dims} dimensions...")
+            logger.info(f"Fitting PCA to reduce to {self.pca_dims} dimensions...")
             reduced = self.pca.fit_transform(embeddings)
             self.is_fitted = True
-            print(f"PCA variance retained: {self.pca.explained_variance_ratio_.sum():.2%}")
+            logger.success(f"PCA variance retained: {self.pca.explained_variance_ratio_.sum():.2%}")
         else:
             reduced = self.pca.transform(embeddings)
         
@@ -185,38 +213,37 @@ class FeatureEngineer:
         self,
         df: pd.DataFrame,
         narrative_col: str = "narrative",
-        drop_ids: bool = True,
+        keep_ids: bool = True,  # BUG #3 FIX: Renamed from drop_ids to keep_ids (clearer)
     ) -> pd.DataFrame:
         """Complete feature engineering pipeline.
         
         Args:
             df: Raw claim DataFrame
             narrative_col: Name of narrative text column
-            drop_ids: Whether to drop ID columns (claimid, claimantid, policyid)
+            keep_ids: Whether to KEEP ID columns in output (claim_id, claimant_id, policy_id)
+                     Default: True (keeps IDs for tracking)
             
         Returns:
             Feature matrix with embeddings + engineered features
         """
-        print("Starting feature engineering pipeline...")
+        logger.info("Starting feature engineering pipeline...")
         
-        # Ensure incident_date is datetime
-        if "incident_date" in df.columns:
-            df["incident_date"] = pd.to_datetime(df["incident_date"])
+        # BUG #2 FIX: Validate and convert incident_date (moved to create_time_features)
         
         # Time-aware features
-        print("Creating time-aware aggregation features...")
+        logger.info("Creating time-aware aggregation features...")
         df = self.create_time_features(df)
         
         # Numeric features
-        print("Creating numeric features...")
+        logger.info("Creating numeric features...")
         df = self.create_numeric_features(df)
         
         # Document features
-        print("Creating document features...")
+        logger.info("Creating document features...")
         df = self.create_document_features(df)
         
         # Categorical encoding
-        print("One-hot encoding categorical features...")
+        logger.info("One-hot encoding categorical features...")
         df_cat = pd.get_dummies(df[self.categorical_features], prefix=self.categorical_features)
         
         # Embeddings
@@ -225,7 +252,7 @@ class FeatureEngineer:
         df_emb = pd.DataFrame(embeddings, columns=self.embedding_cols)
         
         # Assemble feature matrix
-        print("Assembling feature matrix...")
+        logger.info("Assembling feature matrix...")
         feature_df = pd.concat(
             [
                 df[self.numeric_features],
@@ -235,15 +262,19 @@ class FeatureEngineer:
             axis=1,
         )
         
-        if drop_ids:
-            # Keep IDs separate for tracking
+        # BUG #3 FIX: Corrected logic - keep_ids=True means KEEP them
+        if keep_ids:
+            # Keep IDs in the feature matrix for tracking
             id_cols = ["claim_id", "claimant_id", "policy_id"]
             existing_ids = [c for c in id_cols if c in df.columns]
             if existing_ids:
                 ids_df = df[existing_ids].copy()
                 feature_df = pd.concat([ids_df, feature_df], axis=1)
+                logger.info(f"Kept ID columns: {existing_ids}")
+        else:
+            logger.info("ID columns excluded from feature matrix")
         
-        print(f"Feature engineering complete! Shape: {feature_df.shape}")
+        logger.success(f"Feature engineering complete! Shape: {feature_df.shape}")
         return feature_df
 
     def validate_no_leakage(self, feature_df: pd.DataFrame) -> bool:
@@ -269,5 +300,5 @@ class FeatureEngineer:
                 f"These columns may contain label information and must be removed."
             )
         
-        print("✅ Leakage validation passed: No forbidden columns found.")
+        logger.success("✅ Leakage validation passed: No forbidden columns found.")
         return True
