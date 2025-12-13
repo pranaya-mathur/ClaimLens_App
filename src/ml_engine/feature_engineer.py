@@ -96,10 +96,8 @@ class FeatureEngineer:
         Raises:
             ValueError: If required columns are missing or invalid
         """
-        # BUG #9 FIX: Add detailed logging
         logger.info("Creating time-aware features...")
         
-        # Validate incident_date column exists
         if "incident_date" not in df.columns:
             logger.error("Missing 'incident_date' column in DataFrame")
             raise ValueError(
@@ -107,7 +105,6 @@ class FeatureEngineer:
                 "This column is required for time-aware feature engineering."
             )
         
-        # Ensure incident_date is datetime
         try:
             df["incident_date"] = pd.to_datetime(df["incident_date"])
             logger.debug(f"Converted incident_date to datetime (min: {df['incident_date'].min()}, max: {df['incident_date'].max()})")
@@ -118,7 +115,6 @@ class FeatureEngineer:
                 f"Error: {str(e)}"
             )
         
-        # Check for null dates
         null_count = df["incident_date"].isna().sum()
         if null_count > 0:
             logger.warning(f"Found {null_count} null incident_date values. Filling with current date.")
@@ -128,7 +124,6 @@ class FeatureEngineer:
             df_sorted = df.sort_values("incident_date").reset_index(drop=True)
             logger.debug(f"Sorted {len(df_sorted)} claims by incident_date")
             
-            # Claimant history features
             logger.debug("Computing claimant history features...")
             df_sorted["claimant_claim_count"] = df_sorted.groupby("claimant_id").cumcount() + 1
             df_sorted["claimant_total_claimed"] = df_sorted.groupby("claimant_id")["claim_amount"].cumsum()
@@ -136,7 +131,6 @@ class FeatureEngineer:
                 df_sorted["claimant_total_claimed"] / df_sorted["claimant_claim_count"]
             )
             
-            # Policy history features
             logger.debug("Computing policy history features...")
             df_sorted["policy_claim_count"] = df_sorted.groupby("policy_id").cumcount() + 1
             df_sorted["policy_total_claimed"] = df_sorted.groupby("policy_id")["claim_amount"].cumsum()
@@ -144,14 +138,12 @@ class FeatureEngineer:
                 df_sorted["policy_total_claimed"] / df_sorted["policy_claim_count"]
             )
             
-            # Time since last claim
             logger.debug("Computing time-based features...")
             df_sorted["days_since_last_claim"] = (
                 df_sorted.groupby("claimant_id")["incident_date"].diff().dt.days
             )
             df_sorted["days_since_last_claim"] = df_sorted["days_since_last_claim"].fillna(9999)
             
-            # Rapid claims indicator (< 30 days)
             df_sorted["rapid_claims"] = (df_sorted["days_since_last_claim"] < 30).astype(int)
             df_sorted["is_first_claim"] = (df_sorted["claimant_claim_count"] == 1).astype(int)
             
@@ -178,7 +170,6 @@ class FeatureEngineer:
         Returns:
             DataFrame with added numeric features
         """
-        # BUG #9 FIX: Add logging
         logger.debug("Creating numeric features...")
         
         try:
@@ -204,11 +195,9 @@ class FeatureEngineer:
         Returns:
             DataFrame with document presence indicators
         """
-        # BUG #9 FIX: Add logging
         logger.debug("Creating document features...")
         
         try:
-            # Count documents (0 if empty/None)
             df["num_docs"] = df["documents_submitted"].fillna("").apply(
                 lambda s: 1 + str(s).count(",") if str(s).strip() else 0
             )
@@ -247,7 +236,6 @@ class FeatureEngineer:
         Returns:
             PCA-reduced embeddings (n_samples, pca_dims)
         """
-        # BUG #9 FIX: Add logging
         logger.info(f"Generating embeddings for {len(narratives)} narratives...")
         
         try:
@@ -261,17 +249,65 @@ class FeatureEngineer:
             
             logger.debug(f"Raw embeddings shape: {embeddings.shape}")
             
+            # 🔧 FIX BUG #9: Handle single claims (n_samples < pca_dims)
+            n_samples = embeddings.shape[0]
+            embedding_dim = embeddings.shape[1]
+            
+            if n_samples < self.pca_dims:
+                logger.warning(
+                    f"Sample size ({n_samples}) < PCA dims ({self.pca_dims}). "
+                    f"Using adjusted embeddings without PCA reduction."
+                )
+                
+                # Adjust embedding dimensions to match pca_dims
+                if embedding_dim < self.pca_dims:
+                    # Pad with zeros if embedding is smaller than pca_dims
+                    padding = np.zeros((n_samples, self.pca_dims - embedding_dim))
+                    reduced = np.hstack([embeddings, padding])
+                    logger.debug(f"Padded embeddings from {embedding_dim} to {self.pca_dims} dimensions")
+                else:
+                    # Truncate if embedding is larger than pca_dims
+                    reduced = embeddings[:, :self.pca_dims]
+                    logger.debug(f"Truncated embeddings from {embedding_dim} to {self.pca_dims} dimensions")
+                
+                logger.info(f"Adjusted embeddings shape: {reduced.shape}")
+                return reduced
+            
+            # Normal PCA flow for multiple samples
             if not self.is_fitted:
                 logger.info(f"Fitting PCA to reduce to {self.pca_dims} dimensions...")
+                
+                # Ensure we don't try to fit with more components than samples
+                effective_dims = min(self.pca_dims, n_samples)
+                
+                if effective_dims < self.pca_dims:
+                    logger.warning(
+                        f"Reducing PCA dims from {self.pca_dims} to {effective_dims} "
+                        f"(limited by sample size)"
+                    )
+                    self.pca = PCA(n_components=effective_dims, random_state=42)
+                
                 reduced = self.pca.fit_transform(embeddings)
                 self.is_fitted = True
                 variance_retained = self.pca.explained_variance_ratio_.sum()
                 logger.success(f"PCA fitted: {variance_retained:.2%} variance retained")
+                
+                # Pad to target dims if necessary
+                if reduced.shape[1] < self.pca_dims:
+                    padding = np.zeros((reduced.shape[0], self.pca_dims - reduced.shape[1]))
+                    reduced = np.hstack([reduced, padding])
+                    logger.debug(f"Padded PCA output to {self.pca_dims} dimensions")
+                    
             else:
                 logger.debug("Transforming embeddings with existing PCA...")
                 reduced = self.pca.transform(embeddings)
+                
+                # Pad to target dims if necessary
+                if reduced.shape[1] < self.pca_dims:
+                    padding = np.zeros((reduced.shape[0], self.pca_dims - reduced.shape[1]))
+                    reduced = np.hstack([reduced, padding])
             
-            logger.debug(f"Reduced embeddings shape: {reduced.shape}")
+            logger.debug(f"Final embeddings shape: {reduced.shape}")
             
             return reduced
             
@@ -299,30 +335,24 @@ class FeatureEngineer:
         logger.info(f"Starting feature engineering pipeline for {len(df)} claims...")
         
         try:
-            # Time-aware features
             logger.info("Step 1/5: Creating time-aware aggregation features...")
             df = self.create_time_features(df)
             
-            # Numeric features
             logger.info("Step 2/5: Creating numeric features...")
             df = self.create_numeric_features(df)
             
-            # Document features
             logger.info("Step 3/5: Creating document features...")
             df = self.create_document_features(df)
             
-            # Categorical encoding
             logger.info("Step 4/5: One-hot encoding categorical features...")
             df_cat = pd.get_dummies(df[self.categorical_features], prefix=self.categorical_features)
             logger.debug(f"Categorical features: {df_cat.shape[1]} columns created")
             
-            # Embeddings
             logger.info("Step 5/5: Generating narrative embeddings...")
             narratives = df[narrative_col].fillna("").tolist()
             embeddings = self.create_embeddings(narratives)
             df_emb = pd.DataFrame(embeddings, columns=self.embedding_cols)
             
-            # Assemble feature matrix
             logger.info("Assembling final feature matrix...")
             feature_df = pd.concat(
                 [
@@ -364,7 +394,6 @@ class FeatureEngineer:
         Returns:
             True if no leakage detected, raises ValueError otherwise
         """
-        # BUG #9 FIX: Add logging
         logger.debug("Validating feature leakage...")
         
         forbidden_substrings = ["fraud", "score", "redflag", "flag"]
