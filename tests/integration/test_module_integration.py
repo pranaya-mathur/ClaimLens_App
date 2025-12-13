@@ -110,14 +110,15 @@ def test_middleware(tester: IntegrationTester):
 def test_src_modules(tester: IntegrationTester):
     """Test 11-17: Source module imports"""
     src_modules = [
-        ("claim_processor", "src.claim_processor"),
-        ("motor_analyzer", "src.motor_analyzer"),
-        ("health_analyzer", "src.health_analyzer"),
-        ("risk_assessor", "src.risk_assessor"),
-        ("cv_detector", "src.cv_detector"),
-        ("feature_engineer", "src.ml_engine.feature_engineer"),
-        ("fraud_scorer", "src.ml_engine.fraud_scorer")
-    ]
+    ("claim_processor", "src.app.claim_processor"),
+    ("health_analyzer", "src.app.health_analyzer"),
+    ("semantic_aggregator", "src.app.semantic_aggregator"),
+    ("verdict_models", "src.app.verdict_models"),
+    ("damage_detector", "src.cv_engine.damage_detector"),
+    ("feature_engineer", "src.ml_engine.feature_engineer"),
+    ("ml_scorer", "src.ml_engine.ml_scorer"),
+]
+
     
     for module_name, module_path in src_modules:
         def run(mp=module_path, mn=module_name):
@@ -151,7 +152,7 @@ def test_ml_engine_integration(tester: IntegrationTester):
     """Test 19: ML Engine components integration"""
     def run():
         from src.ml_engine.feature_engineer import FeatureEngineer
-        from src.ml_engine.fraud_scorer import MLFraudScorer
+        from src.ml_engine.ml_scorer import MLFraudScorer
         
         # Check class instantiation doesn't crash
         assert FeatureEngineer is not None
@@ -163,7 +164,7 @@ def test_ml_engine_integration(tester: IntegrationTester):
 def test_cv_module_integration(tester: IntegrationTester):
     """Test 20: Computer Vision module integration"""
     def run():
-        from src.cv_detector import DamageDetector
+        from src.cv_engine import DamageDetector
         assert DamageDetector is not None
     
     tester.test("Computer Vision module integration", run)
@@ -191,8 +192,8 @@ def test_document_verification_integration(tester: IntegrationTester):
 def test_health_claim_routing(tester: IntegrationTester):
     """Test 22: Health claim analyzer integration (Bug #1 fix)"""
     def run():
-        from src.health_analyzer import HealthClaimAnalyzer
-        from src.claim_processor import ClaimProcessor
+        from src.app.health_analyzer import HealthClaimAnalyzer
+        from src.app.claim_processor import ClaimProcessor
         
         assert HealthClaimAnalyzer is not None
         assert ClaimProcessor is not None
