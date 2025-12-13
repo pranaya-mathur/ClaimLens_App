@@ -398,7 +398,7 @@ if page == "AI Claim Analyzer":
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            claim_id = st.text_input("🏷️ Claim ID", value="CLM2024001")
+            claim_id = st.text_input("🏷️ Claim ID", value="CLM-2025-001")
             product = st.selectbox("📦 Product Type", ["motor", "health", "life", "property"])
         
         with col2:
@@ -410,7 +410,7 @@ if page == "AI Claim Analyzer":
             days_since_policy = st.number_input("📅 Days Since Policy", min_value=0, value=45)
         
         with col4:
-            claimant_id = st.text_input("👤 Claimant ID", value="CLMT12345")
+            claimant_id = st.text_input("👤 Claimant ID", value="CLMT-12345")
             documents = st.text_input("📄 Documents", value="pan,aadhaar,rc,dl")
         
         narrative = st.text_area(
@@ -419,9 +419,9 @@ if page == "AI Claim Analyzer":
             height=80
         )
     
-    # Document Upload Section
+    # Document Upload Section - UPDATED WITH 4TH COLUMN ✨
     st.markdown("### 📤 Upload Documents")
-    doc_col1, doc_col2, doc_col3 = st.columns(3)
+    doc_col1, doc_col2, doc_col3, doc_col4 = st.columns(4)
     
     with doc_col1:
         pan_file = st.file_uploader("🆔 PAN Card", type=["jpg", "jpeg", "png"], key="pan")
@@ -437,6 +437,35 @@ if page == "AI Claim Analyzer":
         vehicle_file = st.file_uploader("🚗 Vehicle Photo", type=["jpg", "jpeg", "png"], key="vehicle")
         if vehicle_file:
             st.image(vehicle_file, use_container_width=True)
+    
+    with doc_col4:
+        # 👇 NEW 4TH DOCUMENT UPLOAD SECTION
+        st.markdown("**📋 Other Documents**")
+        doc_type = st.selectbox(
+            "Document Type",
+            [
+                "hospital_bill",
+                "discharge_summary",
+                "fir",
+                "police_report",
+                "invoice",
+                "license",
+                "passport",
+                "voter_id",
+                "bank_statement",
+                "death_certificate",
+                "other"
+            ],
+            key="doc_type_select"
+        )
+        
+        other_doc_file = st.file_uploader(
+            "📁 Upload File",
+            type=["jpg", "jpeg", "png", "pdf"],
+            key="other_doc"
+        )
+        if other_doc_file:
+            st.success(f"✅ {doc_type.replace('_', ' ').title()} uploaded")
     
     st.markdown("---")
     
@@ -510,6 +539,46 @@ if page == "AI Claim Analyzer":
             except Exception as e:
                 st.warning(f"Aadhaar verification error: {str(e)}")
         
+        # 👇 NEW: Generic Document Verification for Other Documents
+        if other_doc_file:
+            try:
+                other_doc_file.seek(0)
+                files = {"file": (other_doc_file.name, other_doc_file, other_doc_file.type)}
+                data = {"document_type": doc_type}
+                
+                other_response = requests.post(
+                    f"{API_URL}/api/documents/verify-document",
+                    files=files,
+                    data=data,
+                    timeout=30
+                )
+                
+                if other_response.status_code == 200:
+                    other_data = other_response.json()
+                    doc_results['other_document'] = other_data
+                    
+                    verdict = "SUSPICIOUS" if other_data['risk_score'] > 0.4 else "CLEAN"
+                    
+                    # Merge with existing document_verification or create new
+                    if 'document_verification' in result['component_results']:
+                        # Average the scores
+                        existing = result['component_results']['document_verification']
+                        avg_score = (existing['score'] + other_data['risk_score']) / 2
+                        existing['score'] = avg_score
+                        existing['red_flags'].extend(other_data['red_flags'])
+                    else:
+                        result['component_results']['document_verification'] = {
+                            'verdict': verdict,
+                            'confidence': other_data['confidence'],
+                            'score': other_data['risk_score'],
+                            'reason': other_data['recommendation'],
+                            'red_flags': other_data['red_flags']
+                        }
+                    
+                    st.success(f"✅ {doc_type.replace('_', ' ').title()} verified")
+            except Exception as e:
+                st.warning(f"{doc_type} verification error: {str(e)}")
+        
         # 2. ML Fraud Scoring
         status_text.text("🔍 Running ML fraud detection...")
         progress_bar.progress(0.4)
@@ -548,7 +617,7 @@ if page == "AI Claim Analyzer":
         progress_bar.progress(0.6)
         
         try:
-            claim_num = int(claim_id.replace("CLM", "")) if claim_id.replace("CLM", "").isdigit() else 8000001
+            claim_num = int(claim_id.replace("CLM", "").replace("-", "")) if claim_id.replace("CLM", "").replace("-", "").isdigit() else 8000001
             graph_response = requests.post(f"{API_URL}/api/fraud/score", json={"claim_id": claim_num}, timeout=10)
             
             if graph_response.status_code == 200:
