@@ -25,13 +25,13 @@ class Settings(BaseSettings):
     REDIS_DB: int = 0
     
     # CV Model Paths - Damage Detection
-    PARTS_MODEL_PATH: str = "models/parts_segmentation/yolo11n_best.pt"
-    DAMAGE_MODEL_PATH: str = "models/damage_detection/yolo11m_best.pt"
+    PARTS_MODEL_PATH: str = "models/parts_segmentation/yolo11n_best.pth"
+    DAMAGE_MODEL_PATH: str = "models/damage_detection/yolo11m_best.pth"
     SEVERITY_MODEL_PATH: str = "models/severity_classification/efficientnet_b0_best.pth"
     
     # CV Model Paths - Forgery Detection
-    FORGERY_MODEL_PATH: str = "models/forgery_detector_latest_run.pth"
-    FORGERY_CONFIG_PATH: str = "models/forgery_detector_latest_run_config.json"
+    FORGERY_MODEL_PATH: str = "models/forgery_detection/resnet50_finetuned.pth"
+    FORGERY_CONFIG_PATH: str = "models/forgery_detection/forgery_config.json"
     
     # Legacy Model Paths (for backward compatibility)
     DAMAGE_DETECTOR_PATH: str = "models/cv_models/damage_detector.pt"
