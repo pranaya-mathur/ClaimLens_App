@@ -1,5 +1,5 @@
 """
-Semantic Aggregator using Groq LLM (Llama-3.3-70B)
+Semantic Aggregator using LangChain + Groq LLM (Llama-3.3-70B)
 
 Performs intelligent verdict synthesis by analyzing multiple fraud detection
 components (ML, documents, graph) and generating a final semantic verdict.
@@ -9,14 +9,21 @@ import os
 import json
 from typing import Dict, List, Optional, Any
 from loguru import logger
-from groq import Groq
+
+try:
+    from langchain_groq import ChatGroq
+    from langchain_core.messages import SystemMessage, HumanMessage
+    LANGCHAIN_AVAILABLE = True
+except ImportError:
+    logger.warning("langchain-groq not installed. Install with: pip install langchain-groq")
+    LANGCHAIN_AVAILABLE = False
 
 
 class SemanticAggregator:
     """
     LLM-powered semantic aggregation for fraud detection verdicts.
     
-    Uses Groq's Llama-3.3-70B model to intelligently combine results from:
+    Uses Groq's Llama-3.3-70B via LangChain to intelligently combine results from:
     - Document verification (PAN, Aadhaar, etc.)
     - ML fraud scoring
     - Graph network analysis
@@ -45,24 +52,32 @@ class SemanticAggregator:
             max_tokens: Max tokens for response
         """
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
+        self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.llm = None
+        
+        if not LANGCHAIN_AVAILABLE:
+            logger.error("LangChain not available. Semantic aggregation will use fallback logic.")
+            return
         
         if not self.api_key:
             logger.warning(
                 "GROQ_API_KEY not found. Semantic aggregation will use fallback logic. "
                 "Get your free API key from https://console.groq.com/"
             )
-            self.client = None
         else:
             try:
-                self.client = Groq(api_key=self.api_key)
-                logger.success(f"Groq client initialized with model: {model}")
+                self.llm = ChatGroq(
+                    api_key=self.api_key,
+                    model=self.model,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens
+                )
+                logger.success(f"LangChain ChatGroq initialized with model: {model}")
             except Exception as e:
-                logger.error(f"Failed to initialize Groq client: {e}")
-                self.client = None
-        
-        self.model = model
-        self.temperature = temperature
-        self.max_tokens = max_tokens
+                logger.error(f"Failed to initialize ChatGroq: {e}")
+                self.llm = None
     
     def _build_analysis_prompt(self, component_results: Dict[str, Any], claim_data: Dict[str, Any]) -> str:
         """
@@ -246,7 +261,7 @@ Respond ONLY with valid JSON (no markdown, no explanations outside JSON):
         logger.info(f"Starting semantic aggregation for claim {claim_data.get('claim_id')}")
         
         # Fallback if LLM unavailable
-        if not self.client:
+        if not self.llm:
             return self._fallback_aggregation(component_results, claim_data)
         
         try:
@@ -254,28 +269,18 @@ Respond ONLY with valid JSON (no markdown, no explanations outside JSON):
             prompt = self._build_analysis_prompt(component_results, claim_data)
             logger.debug(f"Prompt length: {len(prompt)} chars")
             
-            # Call Groq API
-            logger.info(f"Calling Groq {self.model}...")
+            # Call LangChain ChatGroq
+            logger.info(f"Calling ChatGroq {self.model}...")
             
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert insurance fraud analyst. Respond only with valid JSON."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                response_format={"type": "json_object"}
-            )
+            messages = [
+                SystemMessage(content="You are an expert insurance fraud analyst. Respond only with valid JSON."),
+                HumanMessage(content=prompt)
+            ]
+            
+            response = self.llm.invoke(messages)
+            content = response.content.strip()
             
             # Parse response
-            content = response.choices[0].message.content
             result = json.loads(content)
             
             # Validate result
@@ -286,11 +291,15 @@ Respond ONLY with valid JSON (no markdown, no explanations outside JSON):
             # Add metadata
             result['llm_used'] = True
             result['model'] = self.model
-            result['tokens_used'] = response.usage.total_tokens
+            
+            # Get token usage if available
+            if hasattr(response, 'response_metadata'):
+                usage = response.response_metadata.get('token_usage', {})
+                result['tokens_used'] = usage.get('total_tokens', 0)
             
             logger.success(
                 f"Semantic aggregation complete: {result['verdict']} "
-                f"(confidence: {result['confidence']:.0%}, tokens: {response.usage.total_tokens})"
+                f"(confidence: {result['confidence']:.0%})"
             )
             
             return result
@@ -308,6 +317,6 @@ Respond ONLY with valid JSON (no markdown, no explanations outside JSON):
         Check if LLM service is available.
         
         Returns:
-            True if Groq client is initialized
+            True if ChatGroq is initialized
         """
-        return self.client is not None
+        return self.llm is not None
