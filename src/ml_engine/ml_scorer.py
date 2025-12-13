@@ -8,9 +8,10 @@ import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union, List
 from catboost import CatBoostClassifier
 import warnings
+from loguru import logger
 
 warnings.filterwarnings("ignore")
 
@@ -30,6 +31,7 @@ class MLFraudScorer:
         feature_importance: DataFrame with feature rankings
         metadata: Model training metrics and config
         threshold: Decision threshold for fraud classification
+        expected_features: List of feature names expected by model
     """
 
     def __init__(
@@ -49,6 +51,7 @@ class MLFraudScorer:
         self.metadata = {}
         self.feature_importance = None
         self.threshold = threshold
+        self.expected_features: Optional[List[str]] = None
         
         if model_path:
             self.load_model(model_path)
@@ -63,21 +66,25 @@ class MLFraudScorer:
         """
         model_path = Path(model_path)
         if not model_path.exists():
+            logger.error(f"Model file not found: {model_path}")
             raise FileNotFoundError(f"Model file not found: {model_path}")
         
-        print(f"Loading CatBoost model from {model_path}...")
+        logger.info(f"Loading CatBoost model from {model_path}...")
         self.model = CatBoostClassifier()
         self.model.load_model(str(model_path))
         
+        # Extract and store expected feature names
+        self.expected_features = list(self.model.feature_names_)
+        logger.info(f"Model expects {len(self.expected_features)} features")
+        
         # Extract feature importance
-        feature_names = self.model.feature_names_
         importances = self.model.get_feature_importance()
         self.feature_importance = pd.DataFrame({
-            "feature": feature_names,
+            "feature": self.expected_features,
             "importance": importances,
         }).sort_values("importance", ascending=False)
         
-        print(f"✅ Model loaded! Features: {len(feature_names)}")
+        logger.success(f"✅ Model loaded! Features: {len(self.expected_features)}")
 
     def load_metadata(self, metadata_path: Union[str, Path]):
         """Load model training metadata.
@@ -87,39 +94,73 @@ class MLFraudScorer:
         """
         metadata_path = Path(metadata_path)
         if not metadata_path.exists():
-            raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
+            logger.warning(f"Metadata file not found: {metadata_path}. Skipping metadata load.")
+            return
         
         with open(metadata_path, "r") as f:
             self.metadata = json.load(f)
         
-        print(f"✅ Metadata loaded: AUC={self.metadata.get('auc_roc', 'N/A')}")
+        logger.info(f"✅ Metadata loaded: AUC={self.metadata.get('auc_roc', 'N/A')}")
 
-    def predict_proba(self, features: pd.DataFrame) -> np.ndarray:
-        """Predict fraud probabilities.
+    def _align_features(self, features: pd.DataFrame) -> pd.DataFrame:
+        """Align input features with model's expected feature schema.
+        
+        CRITICAL: Ensures reliable predictions by handling missing/extra features.
+        - Adds missing features with zeros (for unseen categories)
+        - Removes extra features not in training
+        - Preserves correct column order
         
         Args:
-            features: Feature DataFrame (must match training features)
+            features: Feature DataFrame from feature engineering
+            
+        Returns:
+            Aligned DataFrame with exact features expected by model
+        """
+        if self.expected_features is None:
+            logger.error("Model not loaded! Cannot align features.")
+            raise ValueError("Model must be loaded before feature alignment")
+        
+        current_features = set(features.columns)
+        expected_features_set = set(self.expected_features)
+        
+        missing_features = expected_features_set - current_features
+        extra_features = current_features - expected_features_set
+        
+        if missing_features:
+            logger.debug(
+                f"Adding {len(missing_features)} missing features with zeros. "
+                f"Sample: {list(missing_features)[:5]}"
+            )
+            # Add missing columns with zeros
+            for feat in missing_features:
+                features[feat] = 0
+        
+        if extra_features:
+            logger.debug(
+                f"Removing {len(extra_features)} extra features. "
+                f"Sample: {list(extra_features)[:5]}"
+            )
+        
+        # Reorder columns to match training (only keep expected features)
+        features = features[self.expected_features]
+        
+        return features
+
+    def predict_proba(self, features: pd.DataFrame) -> np.ndarray:
+        """Predict fraud probabilities with automatic feature alignment.
+        
+        Args:
+            features: Feature DataFrame (will be automatically aligned)
             
         Returns:
             Array of fraud probabilities (0-1)
         """
         if self.model is None:
+            logger.error("Model not loaded!")
             raise ValueError("Model not loaded! Call load_model() first.")
         
-        # Ensure feature order matches training
-        expected_features = self.model.feature_names_
-        missing_features = set(expected_features) - set(features.columns)
-        extra_features = set(features.columns) - set(expected_features)
-        
-        if missing_features:
-            raise ValueError(f"Missing features: {missing_features}")
-        
-        if extra_features:
-            # Drop extra features silently
-            features = features[expected_features]
-        
-        # Reorder columns to match training
-        features = features[expected_features]
+        # Align features with model expectations
+        features = self._align_features(features)
         
         # Predict probabilities (return fraud class probability)
         proba = self.model.predict_proba(features)[:, 1]
@@ -331,7 +372,7 @@ class MLFraudScorer:
             raise ValueError("Threshold must be between 0 and 1")
         
         self.threshold = new_threshold
-        print(f"✅ Threshold updated to {new_threshold}")
+        logger.info(f"✅ Threshold updated to {new_threshold}")
 
     def summary(self) -> Dict[str, any]:
         """Get model summary information.
@@ -344,7 +385,7 @@ class MLFraudScorer:
         
         return {
             "model_type": "CatBoostClassifier",
-            "n_features": len(self.model.feature_names_),
+            "n_features": len(self.expected_features) if self.expected_features else 0,
             "threshold": self.threshold,
             "training_metrics": self.metadata,
             "top_5_features": self.feature_importance.head(5).to_dict("records") if self.feature_importance is not None else None,
