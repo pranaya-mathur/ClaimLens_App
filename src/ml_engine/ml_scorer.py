@@ -76,6 +76,7 @@ class MLFraudScorer:
         # Extract and store expected feature names
         self.expected_features = list(self.model.feature_names_)
         logger.info(f"Model expects {len(self.expected_features)} features")
+        logger.debug(f"First 10 expected features: {self.expected_features[:10]}")
         
         # Extract feature importance
         importances = self.model.get_feature_importance()
@@ -120,29 +121,36 @@ class MLFraudScorer:
             logger.error("Model not loaded! Cannot align features.")
             raise ValueError("Model must be loaded before feature alignment")
         
+        # 🔥 DEBUGGING: Log incoming features
+        logger.warning(f"🔍 BEFORE ALIGNMENT: Received {len(features.columns)} features")
+        logger.warning(f"🔍 First 20 received features: {list(features.columns)[:20]}")
+        
         current_features = set(features.columns)
         expected_features_set = set(self.expected_features)
         
         missing_features = expected_features_set - current_features
         extra_features = current_features - expected_features_set
         
+        # 🔥 CRITICAL DEBUG
         if missing_features:
-            logger.debug(
-                f"Adding {len(missing_features)} missing features with zeros. "
-                f"Sample: {list(missing_features)[:5]}"
+            logger.warning(
+                f"⚠️ MISSING {len(missing_features)} features! Adding zeros. "
+                f"Sample: {list(missing_features)[:10]}"
             )
             # Add missing columns with zeros
             for feat in missing_features:
                 features[feat] = 0
         
         if extra_features:
-            logger.debug(
-                f"Removing {len(extra_features)} extra features. "
-                f"Sample: {list(extra_features)[:5]}"
+            logger.warning(
+                f"⚠️ EXTRA {len(extra_features)} features! Removing. "
+                f"Sample: {list(extra_features)[:10]}"
             )
         
         # Reorder columns to match training (only keep expected features)
         features = features[self.expected_features]
+        
+        logger.warning(f"✅ AFTER ALIGNMENT: Now have {len(features.columns)} features (expected {len(self.expected_features)})")
         
         return features
 
@@ -162,8 +170,16 @@ class MLFraudScorer:
         # Align features with model expectations
         features = self._align_features(features)
         
+        # 🔥 DEBUG: Check feature values before prediction
+        logger.warning(f"🔍 Feature stats: mean={features.mean().mean():.3f}, std={features.std().mean():.3f}")
+        logger.warning(f"🔍 Feature sample (first 5 cols): {features.iloc[0, :5].to_dict()}")
+        
         # Predict probabilities (return fraud class probability)
         proba = self.model.predict_proba(features)[:, 1]
+        
+        # 🔥 DEBUG: Log prediction output
+        logger.warning(f"💥 PREDICTION OUTPUT: fraud_proba = {proba[0]:.6f}")
+        
         return proba
 
     def predict(self, features: pd.DataFrame) -> np.ndarray:
