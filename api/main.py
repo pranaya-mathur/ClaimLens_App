@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from api.routes import fraud, health, analytics, ingest, cv_detection, ml_engine, document_verification, unified_fraud
+from api.routes import fraud, health, analytics, ingest, cv_detection, ml_engine, document_verification, unified_fraud, llm_engine
 from api.middleware.rate_limiter import RateLimitMiddleware
 
 
@@ -35,6 +35,7 @@ app.include_router(ingest.router, prefix="/api/ingest", tags=["Claim Ingestion"]
 app.include_router(cv_detection.router, prefix="/api/cv", tags=["Computer Vision"])
 app.include_router(ml_engine.router, prefix="/api/ml", tags=["ML Engine"])
 app.include_router(document_verification.router, prefix="/api/documents", tags=["Document Verification"])
+app.include_router(llm_engine.router, prefix="/api/llm", tags=["LLM Engine"])  # ✅ NEW!
 
 
 @app.on_event("startup")
@@ -46,6 +47,7 @@ async def startup_event():
     logger.info("  - Computer Vision: /api/cv")
     logger.info("  - ML Engine: /api/ml")
     logger.info("  - Document Verification: /api/documents")
+    logger.info("  - LLM Engine: /api/llm ✅ NEW!")  # Updated log
     logger.info("  - Analytics: /api/analytics")
     logger.info("  - Rate Limiting: ENABLED (100 req/min)")
     logger.success("✓ API ready")
@@ -73,6 +75,16 @@ def root():
                 "description": "Complete fraud analysis with ML + CV + Graph + LLM",
                 "status": "NEW"
             },
+            "llm_engine": {
+                "base": "/api/llm",
+                "endpoints": [
+                    "/api/llm/explain",
+                    "/api/llm/health",
+                    "/api/llm/config"
+                ],
+                "description": "AI-powered natural language explanations using Groq LLM",
+                "status": "NEW"
+            },
             "computer_vision": {
                 "base": "/api/cv",
                 "endpoints": [
@@ -94,6 +106,7 @@ def root():
                 "base": "/api/ml",
                 "endpoints": [
                     "/api/ml/score",
+                    "/api/ml/score/detailed",
                     "/api/ml/batch",
                     "/api/ml/explain"
                 ]
@@ -105,13 +118,13 @@ def root():
         },
         "features": {
             "unified_analysis": "All modules (ML + CV + Graph + LLM) in one endpoint",
+            "llm_explanations": "Natural language explanations powered by Groq Llama-3.3-70B",
             "smart_fallbacks": "Handles missing data gracefully",
             "multi_product": "Motor/Health/Life/Property",
             "fraud_rings": "Hospital/Claimant network detection",
             "rate_limiting": "100 requests per minute",
             "document_verification": "PAN/Aadhaar/Generic docs",
             "ocr_extraction": "Multi-language text extraction",
-            "llm_explanations": "Groq-powered AI explanations",
             "neo4j_storage": "Automatic claim persistence for graph queries"
         },
         "status": "active"
