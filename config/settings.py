@@ -32,11 +32,11 @@ class Settings(BaseSettings):
     ML_METADATA_PATH: str = "models/ml_engine/claimlens_model_metadata.json"
     ML_THRESHOLD: float = 0.5  # Fraud classification threshold
     ML_PCA_DIMS: int = 100  # PCA dimensions for narrative embeddings
-    ML_EMBEDDING_MODEL: str = "l3cube-pune/indic-sentence-similarity-sbert"  # Hinglish embeddings
+    ML_EMBEDDING_MODEL: str = "AkshitaS/bhasha-embed-v0"  # Hinglish embeddings (768 dims → PCA to 100)
     
     # CV Model Paths - Damage Detection
-    PARTS_MODEL_PATH: str = "models/parts_segmentation/yolo11n_best.pth"
-    DAMAGE_MODEL_PATH: str = "models/damage_detection/yolo11m_best.pth"
+    PARTS_MODEL_PATH: str = "models/parts_segmentation/yolo11n_best.pt"
+    DAMAGE_MODEL_PATH: str = "models/damage_detection/yolo11m_best.pt"
     SEVERITY_MODEL_PATH: str = "models/severity_classification/efficientnet_b0_best.pth"
     
     # CV Model Paths - Forgery Detection
