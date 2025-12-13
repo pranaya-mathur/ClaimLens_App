@@ -30,7 +30,8 @@ from .forgery_models import AadhaarForgeryDetectorCNN
 
 PathLike = Union[str, Path]
 
-DEFAULT_MODEL_PATH = Path("models/aadhaar_balanced_model.pth")
+# 🔧 FIX: Updated path to forgery_detection subdirectory
+DEFAULT_MODEL_PATH = Path("models/forgery_detection/aadhaar_balanced_model.pth")
 
 
 @dataclass
@@ -145,7 +146,7 @@ class AadhaarForgeryDetector:
         if not self.model_path.exists():
             raise FileNotFoundError(
                 f"Model file not found: {self.model_path}\n"
-                f"Please place 'aadhaar_balanced_model.pth' in the models/ directory."
+                f"Please place 'aadhaar_balanced_model.pth' in the models/forgery_detection/ directory."
             )
         
         logger.info(f"Loading model from {self.model_path}")
