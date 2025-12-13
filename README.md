@@ -8,7 +8,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com)
 [![LangChain](https://img.shields.io/badge/LangChain-0.3+-orange.svg)](https://langchain.com)
 [![Neo4j](https://img.shields.io/badge/Neo4j-5.0+-darkgreen.svg)](https://neo4j.com)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](CHANGELOG.md)
 
 ---
 
@@ -17,7 +18,7 @@
 ClaimLens AI is an enterprise-grade fraud detection system that analyzes insurance claims using multiple AI modalities:
 
 - **🧠 Machine Learning**: CatBoost model with 145 features for fraud probability scoring
-- **👁️ Computer Vision**: Document forgery detection using deep learning
+- **👁️ Computer Vision**: Document forgery detection using deep learning (PAN, Aadhaar, + Generic)
 - **🕸️ Graph Analytics**: Network fraud ring detection via Neo4j
 - **💬 LLM Integration**: Natural language explanations powered by Groq's Llama-3.3-70B
 
@@ -26,7 +27,8 @@ ClaimLens AI is an enterprise-grade fraud detection system that analyzes insuran
 ✅ **Multi-Modal Analysis** - Combines 4 AI engines for comprehensive fraud detection  
 ✅ **Explainable AI** - Human-readable explanations for every decision  
 ✅ **Real-Time Scoring** - Sub-second fraud probability predictions  
-✅ **Document Verification** - PAN/Aadhaar forgery detection with OCR  
+✅ **Document Verification** - PAN/Aadhaar/License/Passport forgery detection with OCR  
+✅ **Generic Document Detector** - 🆕 NEW! Verify driving licenses, passports, bank statements, and more  
 ✅ **Network Detection** - Identifies fraud rings through graph relationships  
 ✅ **Hinglish Support** - Processes claims in English and Hindi-English mix  
 ✅ **Production Ready** - RESTful APIs with rate limiting and monitoring  
@@ -97,22 +99,23 @@ python scripts/diagnose_app.py
 ┌─────────────────────────────────────────────────────────┐
 │                   Streamlit Frontend                     │
 │            (Interactive Claim Analysis UI)               │
-└────────────────────┬────────────────────────────────────┘
-                     │
-                     ▼
+└────────────────────────┬────────────────────────────────┘
+                         │
+                         ▼
 ┌─────────────────────────────────────────────────────────┐
 │                   FastAPI Backend                        │
 │                  (REST API Gateway)                      │
-└──┬──────────┬──────────┬──────────┬─────────────────────┘
-   │          │          │          │
-   ▼          ▼          ▼          ▼
-┌─────┐  ┌────────┐  ┌──────┐  ┌──────────┐
-│ ML  │  │   CV   │  │Graph │  │   LLM    │
-│Engine│  │ Engine │  │Engine│  │  Engine  │
-└─────┘  └────────┘  └──────┘  └──────────┘
-   │          │          │          │
-   ▼          ▼          ▼          ▼
-CatBoost   YOLO/OCR   Neo4j    Groq API
+└──┬────────────┬────────────┬────────────┬───────────────┘
+   │             │            │            │
+   ▼             ▼            ▼            ▼
+┌────────┐  ┌─────────┐  ┌──────────┐  ┌──────────┐
+│ML      │  │CV       │  │Graph     │  │LLM       │
+│Engine  │  │Engine   │  │Engine    │  │Engine    │
+└────────┘  └─────────┘  └──────────┘  └──────────┘
+   │             │            │            │
+   ▼             ▼            ▼            ▼
+CatBoost      YOLO/OCR      Neo4j      Groq API
+              +ResNet50
 ```
 
 ### **Technology Stack**
@@ -122,7 +125,7 @@ CatBoost   YOLO/OCR   Neo4j    Groq API
 | **Backend** | FastAPI | RESTful API framework |
 | **Frontend** | Streamlit | Interactive dashboard |
 | **ML Model** | CatBoost | Fraud probability scoring |
-| **CV Models** | YOLO, Tesseract | Document forgery detection |
+| **CV Models** | YOLO, ResNet50, Tesseract | Document forgery detection |
 | **Graph DB** | Neo4j | Fraud network analysis |
 | **LLM** | Groq Llama-3.3-70B | Natural language explanations |
 | **Orchestration** | LangChain | LLM workflow management |
@@ -145,6 +148,7 @@ POST /api/ml/score/detailed
 # Document Verification
 POST /api/documents/verify-pan
 POST /api/documents/verify-aadhaar
+POST /api/documents/verify-document  # 🆕 NEW! Generic documents
 
 # LLM Explanations
 POST /api/llm/explain
@@ -172,13 +176,22 @@ Analyze claims using ML, CV, Graph, and LLM engines simultaneously
 ### **2. Document Verification**
 Upload PAN/Aadhaar cards for forgery detection with real-time OCR
 
-### **3. AI-Generated Explanations**
+### **3. Generic Document Verification** 🆕
+Verify:
+- 🚗 Driving Licenses
+- ✈️ Passports
+- 🗳️ Voter IDs
+- 🏦 Bank Statements
+- 🏥 Hospital Bills
+- ⚰️ Death Certificates
+
+### **4. AI-Generated Explanations**
 Get human-readable explanations in both technical and customer-friendly language
 
-### **4. Fraud Network Detection**
+### **5. Fraud Network Detection**
 Visualize fraud rings through shared documents and suspicious connections
 
-### **5. Real-Time Dashboards**
+### **6. Real-Time Dashboards**
 Monitor fraud trends, risk distributions, and analytics
 
 ---
@@ -187,10 +200,13 @@ Monitor fraud trends, risk distributions, and analytics
 
 Detailed documentation available in `/docs`:
 
-- [Setup Guide](docs/SETUP.md) - Complete installation instructions
-- [API Documentation](docs/API.md) - Endpoint references and examples
-- [Architecture](docs/ARCHITECTURE.md) - System design and data flow
-- [Deployment](docs/DEPLOYMENT.md) - Production deployment guide
+- **[Setup Guide](docs/SETUP.md)** - Complete installation instructions
+- **[API Documentation](docs/API.md)** - Endpoint references and examples
+- **[Architecture](docs/ARCHITECTURE.md)** - System design and data flow
+- **[Document Verification Guide](docs/guides/document_verification.md)** - CV engine usage
+- **[Deployment](docs/DEPLOYMENT.md)** - Production deployment guide
+- **[CHANGELOG](CHANGELOG.md)** - Version history and updates
+- **[CONTRIBUTING](CONTRIBUTING.md)** - Contribution guidelines
 
 ---
 
@@ -230,7 +246,7 @@ ENABLE_SEMANTIC_AGGREGATION=true
 
 ---
 
-## 📈 **Performance**
+## 📊 **Performance**
 
 - **ML Inference**: <100ms per claim
 - **Document Analysis**: <2s per image
@@ -242,11 +258,19 @@ ENABLE_SEMANTIC_AGGREGATION=true
 
 ## 🛣️ **Roadmap**
 
+### v2.2.0 (Coming Soon)
+- [ ] Batch processing API
+- [ ] PDF document support
+- [ ] Multi-language support (Hindi, Tamil, Telugu)
+- [ ] Enhanced graph visualizations
+
+### v3.0.0 (Future)
 - [ ] **Agentic Architecture** - LangGraph-based autonomous fraud investigation
 - [ ] **Web Intelligence** - Real-time fraud pattern search via Tavily/Perplexity
-- [ ] **Multi-Language Support** - Regional language claim processing
 - [ ] **Advanced Analytics** - Time-series fraud trend prediction
 - [ ] **Mobile App** - React Native mobile interface
+
+See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
 ---
 
@@ -262,7 +286,7 @@ Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 ---
 
-## 📄 **License**
+## 📜 **License**
 
 This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
 
@@ -299,5 +323,7 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
 **Built with ❤️ for the Insurance Industry**
 
 ⭐ Star this repo if you find it useful!
+
+![Visitors](https://visitor-badge.laobi.icu/badge?page_id=pranaya-mathur.ClaimLens_App)
 
 </div>
