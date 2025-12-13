@@ -47,11 +47,12 @@ prometheus-client
 requests
 httpx
 
-# LLM & AI
+# LLM & AI (Semantic Aggregation + Explainability)
 langchain
 langchain-groq
+langchain-core
 langchain-community
-openai
+openai  # Optional: for OpenAI fallback
 
 # Utilities
 python-multipart
