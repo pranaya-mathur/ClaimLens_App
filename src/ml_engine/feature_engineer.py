@@ -30,20 +30,28 @@ class FeatureEngineer:
         pca: PCA model for dimensionality reduction
         pca_dims: Number of embedding dimensions (default: 100)
         is_fitted: Whether PCA has been fitted
+        expected_features: List of feature names expected by the model (for alignment)
     """
 
-    def __init__(self, pca_dims: int = 100, model_name: str = "AkshitaS/bhasha-embed-v0"):
+    def __init__(
+        self, 
+        pca_dims: int = 100, 
+        model_name: str = "AkshitaS/bhasha-embed-v0",
+        expected_features: Optional[List[str]] = None
+    ):
         """Initialize feature engineer.
         
         Args:
             pca_dims: Number of PCA dimensions for embeddings (default: 100)
             model_name: HuggingFace model for embeddings (default: Bhasha-Embed)
+            expected_features: List of feature column names from trained model (for alignment)
         """
         self.pca_dims = pca_dims
         self.model_name = model_name
         self.embedder = None
         self.pca = PCA(n_components=pca_dims, random_state=42)
         self.is_fitted = False
+        self.expected_features = expected_features  # Store for feature alignment
         
         # Feature column tracking
         self.numeric_features = [
@@ -72,6 +80,8 @@ class FeatureEngineer:
         self.embedding_cols = [f"emb_{i}" for i in range(pca_dims)]
         
         logger.info(f"FeatureEngineer initialized with {pca_dims} PCA dimensions")
+        if expected_features:
+            logger.info(f"Feature alignment enabled: {len(expected_features)} expected features")
 
     def _load_embedder(self):
         """Lazy load embedding model."""
@@ -249,7 +259,7 @@ class FeatureEngineer:
             
             logger.debug(f"Raw embeddings shape: {embeddings.shape}")
             
-            # 🔧 FIX BUG #9: Handle single claims (n_samples < pca_dims)
+            # Handle single claims (n_samples < pca_dims)
             n_samples = embeddings.shape[0]
             embedding_dim = embeddings.shape[1]
             
@@ -362,6 +372,65 @@ class FeatureEngineer:
         
         return df
 
+    def _align_features_with_model(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Align engineered features with model's expected feature schema.
+        
+        CRITICAL FIX: Ensures feature matrix matches trained model exactly.
+        - Adds missing columns with zeros (for unseen categories/embeddings)
+        - Removes extra columns not in training
+        - Preserves column order from training
+        
+        Args:
+            df: DataFrame with engineered features
+            
+        Returns:
+            DataFrame aligned with model's expected features
+        """
+        if self.expected_features is None:
+            logger.debug("No expected features provided. Skipping feature alignment.")
+            return df
+        
+        logger.info("Aligning features with model schema...")
+        
+        # Separate ID columns from feature columns
+        id_cols = [c for c in ['claim_id', 'claimant_id', 'policy_id'] if c in df.columns]
+        feature_cols = [c for c in df.columns if c not in id_cols]
+        
+        current_features = set(feature_cols)
+        expected_features = set(self.expected_features)
+        
+        missing_features = expected_features - current_features
+        extra_features = current_features - expected_features
+        
+        if missing_features:
+            logger.debug(
+                f"Adding {len(missing_features)} missing features with zeros. "
+                f"Sample: {list(missing_features)[:5]}"
+            )
+            # Add missing columns with zeros
+            for feat in missing_features:
+                df[feat] = 0
+        
+        if extra_features:
+            logger.debug(
+                f"Removing {len(extra_features)} extra features not in training. "
+                f"Sample: {list(extra_features)[:5]}"
+            )
+            # Drop extra columns
+            df = df.drop(columns=list(extra_features))
+        
+        # Reorder columns to match training (IDs first, then features in expected order)
+        final_cols = id_cols + self.expected_features
+        df = df[[c for c in final_cols if c in df.columns]]
+        
+        logger.success(
+            f"Feature alignment complete: {len(self.expected_features)} features "
+            f"({len(missing_features)} added, {len(extra_features)} removed)"
+        )
+        
+        return df
+
     def engineer_features(
         self,
         df: pd.DataFrame,
@@ -423,6 +492,9 @@ class FeatureEngineer:
             
             # Normalize column names to match model (FIXED: preserves categorical dummies)
             feature_df = self._normalize_column_names(feature_df)
+            
+            # NEW: Align features with model's expected schema
+            feature_df = self._align_features_with_model(feature_df)
             
             logger.success(
                 f"Feature engineering complete! "
