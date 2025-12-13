@@ -1,15 +1,7 @@
 #!/usr/bin/env python3
 """
-ClaimLens v2.0 SOTA Dashboard
-State-of-the-Art Features:
-- Modern glassmorphism UI
-- Real-time streaming explanations
-- Interactive confidence meters
-- Animated risk gauges
-- Network graph visualization
-- Downloadable reports
-- Dark mode support
-- Mobile responsive
+ClaimLens v2.0 SOTA Dashboard - Real API Integration
+Now connects to actual backend endpoints for live analysis
 """
 
 import streamlit as st
@@ -18,9 +10,11 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import networkx as nx
-from datetime import datetime
+from datetime import datetime, date
 import json
 import time
+import base64
+from io import BytesIO
 
 # Configuration
 API_URL = "http://localhost:8000"
@@ -205,7 +199,7 @@ with st.sidebar:
     
     page = st.selectbox(
         "📊 Select Module",
-        ["AI Claim Analyzer", "Fraud Network Graph", "Serial Fraudsters", "Analytics Dashboard", "Explainability Lab"],
+        ["AI Claim Analyzer", "Fraud Network Graph", "Serial Fraudsters", "Analytics Dashboard"],
         help="Navigate between different analysis modules"
     )
     
@@ -233,12 +227,20 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Quick stats
-    st.markdown("""
+    # API Health Check
+    try:
+        health_check = requests.get(f"{API_URL}/health/liveness", timeout=2)
+        api_status = "✅" if health_check.status_code == 200 else "⚠️"
+        status_text = "Models Active" if health_check.status_code == 200 else "Degraded"
+    except:
+        api_status = "❌"
+        status_text = "API Offline"
+    
+    st.markdown(f"""
     <div class='metric-card'>
         <h3 style='color: #667eea; margin: 0;'>AI Status</h3>
-        <p style='font-size: 2em; margin: 10px 0;'>✅</p>
-        <p style='margin: 0;'>Models Active</p>
+        <p style='font-size: 2em; margin: 10px 0;'>{api_status}</p>
+        <p style='margin: 0;'>{status_text}</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -311,15 +313,23 @@ def create_risk_radial(component_results):
     )
     return fig
 
-def create_network_graph(claim_id):
+def create_network_graph(claim_id, graph_data=None):
     """Create fraud network graph."""
-    # Mock network data
     G = nx.Graph()
     G.add_node(claim_id, node_type='claim', risk='high')
-    G.add_node('CLMT001', node_type='claimant')
-    G.add_node('DOC123', node_type='document')
-    G.add_node('HOS456', node_type='hospital')
-    G.add_edges_from([(claim_id, 'CLMT001'), (claim_id, 'DOC123'), ('CLMT001', 'HOS456')])
+    
+    if graph_data and 'graph_insights' in graph_data:
+        insights = graph_data['graph_insights']
+        fraud_count = insights.get('neighbor_fraud_count', 0)
+        
+        # Add nodes based on actual data
+        for i in range(min(fraud_count, 3)):  # Limit to 3 neighbors
+            G.add_node(f'FRAUD_{i}', node_type='fraud_neighbor')
+            G.add_edge(claim_id, f'FRAUD_{i}')
+    else:
+        # Minimal graph if no data
+        G.add_node('CLMT001', node_type='claimant')
+        G.add_edge(claim_id, 'CLMT001')
     
     pos = nx.spring_layout(G)
     
@@ -339,10 +349,12 @@ def create_network_graph(claim_id):
     node_y = [pos[node][1] for node in G.nodes()]
     node_text = list(G.nodes())
     
+    node_colors = ['#ff4444' if 'FRAUD' in str(node) else '#667eea' for node in G.nodes()]
+    
     node_trace = go.Scatter(
         x=node_x, y=node_y, mode='markers+text',
         hoverinfo='text', text=node_text, textposition="top center",
-        marker=dict(size=30, color='#667eea', line=dict(width=2, color='white'))
+        marker=dict(size=30, color=node_colors, line=dict(width=2, color='white'))
     )
     
     fig = go.Figure(data=[edge_trace, node_trace])
@@ -391,7 +403,7 @@ if page == "AI Claim Analyzer":
         
         with col2:
             subtype = st.text_input("📝 Claim Subtype", value="accident")
-            claim_amount = st.number_input("💵 Claim Amount (₹)", min_value=0, value=450000, step=10000)
+            claim_amount = st.number_input("💵 Claim Amount (₹)", min_value=0, value=250000, step=10000)
         
         with col3:
             policy_premium = st.number_input("💳 Premium (₹)", min_value=0, value=15000, step=1000)
@@ -401,64 +413,232 @@ if page == "AI Claim Analyzer":
             claimant_id = st.text_input("👤 Claimant ID", value="CLMT12345")
             documents = st.text_input("📄 Documents", value="pan,aadhaar,rc,dl")
         
-        col_a, col_b, col_c = st.columns([1, 1, 1])
-        with col_b:
-            analyze_btn = st.button("🚀 Analyze with AI", type="primary", use_container_width=True)
+        narrative = st.text_area(
+            "📝 Claim Narrative (Hinglish)",
+            value="Meri gaadi ko accident ho gaya tha highway pe. Front bumper aur headlight damage hai.",
+            height=80
+        )
+    
+    # Document Upload Section
+    st.markdown("### 📤 Upload Documents")
+    doc_col1, doc_col2, doc_col3 = st.columns(3)
+    
+    with doc_col1:
+        pan_file = st.file_uploader("🆔 PAN Card", type=["jpg", "jpeg", "png"], key="pan")
+        if pan_file:
+            st.image(pan_file, use_container_width=True)
+    
+    with doc_col2:
+        aadhaar_file = st.file_uploader("🪪 Aadhaar Card", type=["jpg", "jpeg", "png"], key="aadhaar")
+        if aadhaar_file:
+            st.image(aadhaar_file, use_container_width=True)
+    
+    with doc_col3:
+        vehicle_file = st.file_uploader("🚗 Vehicle Photo", type=["jpg", "jpeg", "png"], key="vehicle")
+        if vehicle_file:
+            st.image(vehicle_file, use_container_width=True)
+    
+    st.markdown("---")
+    
+    col_a, col_b, col_c = st.columns([1, 1, 1])
+    with col_b:
+        analyze_btn = st.button("🚀 Analyze with AI", type="primary", use_container_width=True)
     
     if analyze_btn:
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        # Simulate analysis stages
-        stages = [
-            ("📄 Verifying documents...", 0.2),
-            ("🔍 Running ML fraud detection...", 0.4),
-            ("🕸️ Analyzing fraud networks...", 0.6),
-            ("🧠 Applying semantic aggregation...", 0.8),
-            ("🤖 Generating AI explanation...", 1.0)
-        ]
-        
-        for stage, progress in stages:
-            status_text.text(stage)
-            progress_bar.progress(progress)
-            time.sleep(0.5)
-        
-        status_text.empty()
-        progress_bar.empty()
-        
-        # Mock semantic result
+        # Real API calls
         result = {
             "claim_id": claim_id,
             "verdict": "REVIEW",
-            "confidence": 0.82,
-            "final_score": 0.68,
-            "primary_reason": "High claim-to-premium ratio (30x) combined with early claim timing",
-            "component_results": {
-                "document_verification": {
-                    "verdict": "SUSPICIOUS", "confidence": 0.72, "score": 0.72,
-                    "reason": "Moderate risk patterns detected", "red_flags": ["Limited document count"]
-                },
-                "ml_fraud_score": {
-                    "verdict": "HIGH_RISK", "confidence": 0.84, "score": 0.84,
-                    "reason": "ML fraud probability 84%", "red_flags": ["High claim-to-premium ratio", "Early claim timing"]
-                },
-                "graph_analysis": {
-                    "verdict": "CLEAN", "confidence": 0.88, "score": 0.20,
-                    "reason": "No fraud network detected", "red_flags": []
-                }
-            },
+            "confidence": 0.75,
+            "final_score": 0.55,
+            "primary_reason": "Analysis in progress...",
+            "component_results": {},
             "critical_flags": [],
-            "reasoning_chain": [
-                {"stage": "critical_flag_check", "decision": "NO_FLAGS", "reason": "No critical violations detected"},
-                {"stage": "adaptive_scoring", "decision": "CALCULATED", "reason": "Aggregated risk score: 0.68"},
-                {"stage": "verdict_determination", "decision": "REVIEW", "reason": "Score threshold maps to manual review"}
-            ],
-            "explanation": "This claim requires manual review due to several risk factors. The claim amount of ₹450,000 against a premium of ₹ 15,000 represents a 30x ratio, which is significantly higher than average. Additionally, the claim was filed just 45 days after policy inception, which statistically correlates with higher fraud risk. While our document verification shows moderate concerns and ML models predict 84% fraud probability, no fraud network connections were detected. We recommend verifying the claimant's history and authenticating all submitted documents before processing."
+            "reasoning_chain": [],
+            "explanation": ""
         }
+        
+        # 1. Document Verification
+        status_text.text("📄 Verifying documents...")
+        progress_bar.progress(0.2)
+        
+        doc_results = {}
+        
+        if pan_file:
+            try:
+                pan_file.seek(0)
+                files = {"file": (pan_file.name, pan_file, pan_file.type)}
+                pan_response = requests.post(f"{API_URL}/api/documents/verify-pan", files=files, timeout=30)
+                
+                if pan_response.status_code == 200:
+                    pan_data = pan_response.json()
+                    doc_results['pan'] = pan_data
+                    
+                    verdict = "SUSPICIOUS" if pan_data['risk_score'] > 0.4 else "CLEAN"
+                    result['component_results']['document_verification'] = {
+                        'verdict': verdict,
+                        'confidence': pan_data['confidence'],
+                        'score': pan_data['risk_score'],
+                        'reason': pan_data['recommendation'],
+                        'red_flags': pan_data['red_flags']
+                    }
+            except Exception as e:
+                st.warning(f"PAN verification error: {str(e)}")
+        
+        if aadhaar_file:
+            try:
+                aadhaar_file.seek(0)
+                files = {"file": (aadhaar_file.name, aadhaar_file, aadhaar_file.type)}
+                aadhaar_response = requests.post(f"{API_URL}/api/documents/verify-aadhaar", files=files, timeout=30)
+                
+                if aadhaar_response.status_code == 200:
+                    aadhaar_data = aadhaar_response.json()
+                    doc_results['aadhaar'] = aadhaar_data
+                    
+                    verdict = "SUSPICIOUS" if aadhaar_data['risk_score'] > 0.4 else "CLEAN"
+                    if 'document_verification' not in result['component_results']:
+                        result['component_results']['document_verification'] = {
+                            'verdict': verdict,
+                            'confidence': aadhaar_data['confidence'],
+                            'score': aadhaar_data['risk_score'],
+                            'reason': aadhaar_data['recommendation'],
+                            'red_flags': aadhaar_data['red_flags']
+                        }
+            except Exception as e:
+                st.warning(f"Aadhaar verification error: {str(e)}")
+        
+        # 2. ML Fraud Scoring
+        status_text.text("🔍 Running ML fraud detection...")
+        progress_bar.progress(0.4)
+        
+        try:
+            ml_payload = {
+                "claim_id": claim_id,
+                "claimant_id": claimant_id,
+                "policy_id": f"POL{claimant_id[4:]}",
+                "product": product,
+                "city": "Mumbai",
+                "subtype": subtype,
+                "claim_amount": float(claim_amount),
+                "days_since_policy_start": int(days_since_policy),
+                "narrative": narrative,
+                "documents_submitted": documents,
+                "incident_date": str(date.today())
+            }
+            
+            ml_response = requests.post(f"{API_URL}/api/ml/score/detailed", json=ml_payload, timeout=30)
+            
+            if ml_response.status_code == 200:
+                ml_data = ml_response.json()
+                result['component_results']['ml_fraud_score'] = {
+                    'verdict': ml_data['risk_level'],
+                    'confidence': ml_data['fraud_probability'],
+                    'score': ml_data['fraud_probability'],
+                    'reason': f"ML fraud probability {ml_data['fraud_probability']:.0%}",
+                    'red_flags': [f"Risk level: {ml_data['risk_level']}"]
+                }
+        except Exception as e:
+            st.warning(f"ML scoring error: {str(e)}")
+        
+        # 3. Graph Analysis
+        status_text.text("🕸️ Analyzing fraud networks...")
+        progress_bar.progress(0.6)
+        
+        try:
+            claim_num = int(claim_id.replace("CLM", "")) if claim_id.replace("CLM", "").isdigit() else 8000001
+            graph_response = requests.post(f"{API_URL}/api/fraud/score", json={"claim_id": claim_num}, timeout=10)
+            
+            if graph_response.status_code == 200:
+                graph_data = graph_response.json()
+                insights = graph_data.get('graph_insights', {})
+                fraud_count = insights.get('neighbor_fraud_count', 0)
+                
+                result['component_results']['graph_analysis'] = {
+                    'verdict': 'FRAUD_RING_DETECTED' if fraud_count > 0 else 'CLEAN',
+                    'confidence': 0.88,
+                    'score': graph_data.get('final_risk_score', 0.12),
+                    'reason': f"{fraud_count} fraud connections detected" if fraud_count > 0 else "No fraud network detected",
+                    'red_flags': [f"{fraud_count} fraud neighbors"] if fraud_count > 0 else []
+                }
+                result['graph_data'] = graph_data
+        except:
+            result['component_results']['graph_analysis'] = {
+                'verdict': 'CLEAN',
+                'confidence': 0.85,
+                'score': 0.15,
+                'reason': 'Graph analysis unavailable',
+                'red_flags': []
+            }
+        
+        # 4. Calculate final verdict
+        status_text.text("🧠 Applying semantic aggregation...")
+        progress_bar.progress(0.8)
+        
+        # Weighted scoring
+        doc_score = result['component_results'].get('document_verification', {}).get('score', 0) * 0.3
+        ml_score = result['component_results'].get('ml_fraud_score', {}).get('score', 0) * 0.4
+        graph_score = result['component_results'].get('graph_analysis', {}).get('score', 0) * 0.3
+        
+        result['final_score'] = doc_score + ml_score + graph_score
+        
+        if result['final_score'] >= 0.7:
+            result['verdict'] = "REJECT"
+            result['primary_reason'] = "High fraud probability detected across multiple components"
+        elif result['final_score'] >= 0.4:
+            result['verdict'] = "REVIEW"
+            result['primary_reason'] = f"Claim amount ₹{claim_amount:,} against premium ₹{policy_premium:,} ({claim_amount/policy_premium:.0f}x ratio) with {days_since_policy} days policy age"
+        else:
+            result['verdict'] = "APPROVE"
+            result['primary_reason'] = "Low fraud indicators detected"
+        
+        result['confidence'] = 1 - abs(result['final_score'] - 0.5) * 2
+        
+        # 5. Generate explanation
+        status_text.text("🤖 Generating AI explanation...")
+        progress_bar.progress(0.9)
+        
+        explanation_parts = []
+        explanation_parts.append(f"This claim requires {result['verdict'].lower()} based on our multi-modal analysis.")
+        explanation_parts.append(f"The claim amount of ₹{claim_amount:,} against a premium of ₹{policy_premium:,} represents a {claim_amount/policy_premium:.0f}x ratio.")
+        explanation_parts.append(f"The claim was filed {days_since_policy} days after policy inception.")
+        
+        if 'ml_fraud_score' in result['component_results']:
+            ml_prob = result['component_results']['ml_fraud_score']['score'] * 100
+            explanation_parts.append(f"Our ML models predict {ml_prob:.0f}% fraud probability.")
+        
+        if 'document_verification' in result['component_results']:
+            doc_verdict = result['component_results']['document_verification']['verdict']
+            explanation_parts.append(f"Document verification: {doc_verdict}.")
+        
+        if 'graph_analysis' in result['component_results']:
+            graph_verdict = result['component_results']['graph_analysis']['verdict']
+            if 'FRAUD' in graph_verdict:
+                explanation_parts.append("Fraud network connections were detected.")
+            else:
+                explanation_parts.append("No fraud network connections were detected.")
+        
+        explanation_parts.append("We recommend verifying the claimant's history before processing.")
+        
+        result['explanation'] = " ".join(explanation_parts)
+        
+        # Reasoning chain
+        result['reasoning_chain'] = [
+            {"stage": "document_verification", "decision": result['component_results'].get('document_verification', {}).get('verdict', 'N/A'), "reason": "Document analysis completed"},
+            {"stage": "ml_fraud_scoring", "decision": result['component_results'].get('ml_fraud_score', {}).get('verdict', 'N/A'), "reason": "ML risk assessment completed"},
+            {"stage": "graph_analysis", "decision": result['component_results'].get('graph_analysis', {}).get('verdict', 'N/A'), "reason": "Network analysis completed"},
+            {"stage": "final_verdict", "decision": result['verdict'], "reason": f"Final risk score: {result['final_score']:.2f}"}
+        ]
+        
+        progress_bar.progress(1.0)
+        status_text.empty()
+        progress_bar.empty()
         
         st.markdown("---")
         
-        # Verdict Display
+        # Display Results
         emoji = get_verdict_emoji(result['verdict'])
         verdict_class = f"verdict-{result['verdict'].lower()}"
         
@@ -494,10 +674,10 @@ if page == "AI Claim Analyzer":
             st.markdown("""
             <div class='glass-card' style='text-align: center;'>
                 <h3 style='color: #667eea;'>Claim:Premium</h3>
-                <p style='font-size: 3em; margin: 0;'>30x</p>
+                <p style='font-size: 3em; margin: 0;'>{}x</p>
                 <p>Ratio</p>
             </div>
-            """, unsafe_allow_html=True)
+            """.format(int(claim_amount/policy_premium)), unsafe_allow_html=True)
         
         # Component Analysis
         st.markdown("<h3 style='color: #667eea; margin-top: 30px;'>📦 Component Risk Analysis</h3>", unsafe_allow_html=True)
@@ -505,7 +685,6 @@ if page == "AI Claim Analyzer":
         col1, col2 = st.columns([1, 1])
         
         with col1:
-            # Component cards
             for comp_name, comp_result in result['component_results'].items():
                 emoji = get_verdict_emoji(comp_result['verdict'])
                 st.markdown(f"""
@@ -524,13 +703,13 @@ if page == "AI Claim Analyzer":
                 """, unsafe_allow_html=True)
         
         with col2:
-            # Radial risk chart
-            fig_radial = create_risk_radial(result['component_results'])
-            st.plotly_chart(fig_radial, use_container_width=True)
+            if result['component_results']:
+                fig_radial = create_risk_radial(result['component_results'])
+                st.plotly_chart(fig_radial, use_container_width=True)
         
         # Network Graph
         st.markdown("<h3 style='color: #667eea; margin-top: 30px;'>🕸️ Fraud Network Analysis</h3>", unsafe_allow_html=True)
-        fig_network = create_network_graph(claim_id)
+        fig_network = create_network_graph(claim_id, result.get('graph_data'))
         st.plotly_chart(fig_network, use_container_width=True)
         
         # Reasoning Chain
@@ -562,7 +741,9 @@ if page == "AI Claim Analyzer":
         st.markdown("---")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
-            report_json = json.dumps(result, indent=2)
+            # Remove graph_data from downloadable report
+            report_data = {k: v for k, v in result.items() if k != 'graph_data'}
+            report_json = json.dumps(report_data, indent=2)
             st.download_button(
                 label="📥 Download Full Report (JSON)",
                 data=report_json,
@@ -571,25 +752,76 @@ if page == "AI Claim Analyzer":
                 use_container_width=True
             )
 
-# ============================================================================
-# OTHER MODULES (Simplified placeholders - add full implementation)
-# ============================================================================
-
+# Other pages remain as placeholders
 elif page == "Fraud Network Graph":
     st.markdown("<h2 style='text-align: center; color: #667eea;'>🕸️ Interactive Fraud Network</h2>", unsafe_allow_html=True)
-    st.info("🚧 Feature under development - will show interactive fraud ring graphs")
+    st.info("🚧 Feature available - showing fraud ring analysis from graph database")
+    
+    min_docs = st.slider("Minimum Shared Documents", 2, 10, 2)
+    if st.button("Find Fraud Rings"):
+        try:
+            response = requests.get(f"{API_URL}/api/fraud/rings", params={"min_shared_docs": min_docs})
+            if response.status_code == 200:
+                data = response.json()
+                st.success(f"Found {data['total_rings_found']} fraud rings")
+                if data['rings']:
+                    df = pd.DataFrame(data['rings'])
+                    st.dataframe(df, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
 
 elif page == "Serial Fraudsters":
     st.markdown("<h2 style='text-align: center; color: #667eea;'>👤 Serial Fraudster Detection</h2>", unsafe_allow_html=True)
-    st.info("🚧 Feature under development - will show serial fraudster patterns")
+    
+    min_claims = st.slider("Minimum Fraud Claims", 2, 10, 3)
+    if st.button("Find Serial Fraudsters"):
+        try:
+            response = requests.get(f"{API_URL}/api/fraud/serial-fraudsters", params={"min_fraud_claims": min_claims})
+            if response.status_code == 200:
+                data = response.json()
+                st.success(f"Found {data['total_found']} serial fraudsters")
+                if data['fraudsters']:
+                    df = pd.DataFrame(data['fraudsters'])
+                    st.dataframe(df, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
 
 elif page == "Analytics Dashboard":
     st.markdown("<h2 style='text-align: center; color: #667eea;'>📊 Real-Time Analytics</h2>", unsafe_allow_html=True)
-    st.info("🚧 Feature under development - will show comprehensive analytics")
-
-elif page == "Explainability Lab":
-    st.markdown("<h2 style='text-align: center; color: #667eea;'>🧪 Explainability Laboratory</h2>", unsafe_allow_html=True)
-    st.info("🚧 Feature under development - will allow testing different explanation styles")
+    
+    try:
+        overview_response = requests.get(f"{API_URL}/api/analytics/overview", timeout=5)
+        
+        if overview_response.status_code == 200:
+            overview = overview_response.json()
+            
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Total Claims", f"{overview['total_claims']:,}")
+            col2.metric("Fraud Claims", f"{overview['fraud_claims']:,}", f"{overview['fraud_rate']}%")
+            col3.metric("Avg Fraud Score", f"{overview['avg_fraud_score']:.3f}")
+            col4.metric("Total Amount", f"₹{overview['total_amount']/1000000:.1f}M")
+            
+            st.markdown("---")
+            
+            chart_col1, chart_col2 = st.columns(2)
+            
+            with chart_col1:
+                st.subheader("Risk Distribution")
+                risk_response = requests.get(f"{API_URL}/api/analytics/risk-distribution")
+                if risk_response.status_code == 200:
+                    risk_data = pd.DataFrame(risk_response.json())
+                    fig = px.pie(risk_data, values='count', names='risk_level', hole=0.4)
+                    st.plotly_chart(fig, use_container_width=True)
+            
+            with chart_col2:
+                st.subheader("Fraud by Product")
+                product_response = requests.get(f"{API_URL}/api/analytics/by-product")
+                if product_response.status_code == 200:
+                    product_data = pd.DataFrame(product_response.json())
+                    fig = px.bar(product_data, x='product', y='fraud_rate')
+                    st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        st.error(f"Cannot connect to analytics API: {str(e)}")
 
 # Footer
 st.markdown("---")
@@ -597,7 +829,7 @@ st.markdown("""
 <div style='text-align: center; padding: 20px;'>
     <p style='color: #666; font-size: 0.9em;'>
         ClaimLens AI v2.0 | State-of-the-Art Explainable Fraud Detection<br>
-        ✨ Powered by Semantic Aggregation + LLM (Groq + Llama-3.3-70B)<br>
+        ✨ Powered by Real-Time API Integration + Multi-Modal Analysis<br>
         Built with ❤️ using Streamlit, Plotly, NetworkX<br>
         <strong>Last Updated:</strong> December 2025
     </p>
