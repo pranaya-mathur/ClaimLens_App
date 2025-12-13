@@ -1,7 +1,60 @@
+# Core FastAPI & Web Framework
 fastapi
 uvicorn[standard]
+gunicorn
 pydantic
+pydantic-settings
 python-dotenv
-langchain-groq
+
+# Database & Graph
+neo4j
+
+# Data Processing & Analysis
 pandas
+numpy
+scikit-learn
+
+# Machine Learning
+xgboost
+catboost
+
+# Deep Learning & Computer Vision
+torch
+torchvision
+opencv-python
+Pillow
+ultralytics  # YOLO11 models for parts & damage detection
+timm  # PyTorch Image Models for EfficientNet compatibility
+
+# NLP & Transformers
+transformers
+sentence-transformers
+
+# Graph Analytics
+networkx[default]
+
+# Frontend & Visualization
+streamlit
+plotly
+matplotlib
+seaborn
+
+# Monitoring & Logging
+loguru
 prometheus-client
+
+# HTTP & API Clients
+requests
+httpx
+
+# LLM & AI (Semantic Aggregation + Explainability)
+langchain
+langchain-groq
+langchain-core
+langchain-community
+openai  # Optional: for OpenAI fallback
+
+# Utilities
+python-multipart
+aiofiles
+python-dateutil
