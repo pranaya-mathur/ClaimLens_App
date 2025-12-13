@@ -1,256 +1,195 @@
-# 🔍 ClaimLens - AI-Powered Fraud Detection System
+# ClaimLens - AI-Powered Insurance Fraud Detection
 
-Lemonade-level fraud detection for Indian insurance claims using:
-- 🖼️ **Computer Vision** (damage detection, document forgery detection)
-- 🕸️ **Graph Analytics** (fraud rings, document reuse)
-- 🤖 **Machine Learning** (XGBoost fraud scorer)
-- 💬 **NLP** (narrative analysis)
+> Enterprise-grade fraud detection system for Indian insurance claims combining computer vision, graph analytics, and machine learning for real-time decision-making.
 
-## 🚀 Quick Start
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)](https://www.docker.com/)
 
-### 1. Setup Environment
+## Overview
+
+ClaimLens delivers production-ready fraud detection for insurance claims through a multi-layered AI architecture. The system processes vehicle damage assessments, verifies identity documents, analyzes fraud networks, and provides explainable decisions in under 2 seconds.
+
+### Core Capabilities
+
+- **Document Verification**: Deep learning-based forgery detection for Aadhaar and PAN cards with high accuracy
+- **Vehicle Damage Assessment**: Multi-model pipeline for parts segmentation, damage detection, and severity classification
+- **Fraud Network Analysis**: Graph-based detection of fraud rings, serial fraudsters, and document reuse patterns
+- **Explainable AI**: LLM-powered explanations tailored for adjusters and customers
+- **Real-time Processing**: End-to-end claim adjudication with semantic aggregation
+
+## Architecture
+
+```
+┌─────────────────┐
+│  Claim Upload   │
+└────────┬────────┘
+         │
+    ┌────▼─────────────────────────┐
+    │    Computer Vision Engine    │
+    │  • Document Verification     │
+    │  • Damage Detection          │
+    └────────┬─────────────────────┘
+             │
+    ┌────────▼─────────────────────┐
+    │   Machine Learning Engine    │
+    │  • XGBoost Risk Scoring      │
+    │  • NLP Narrative Analysis    │
+    └────────┬─────────────────────┘
+             │
+    ┌────────▼─────────────────────┐
+    │    Fraud Graph Analytics     │
+    │  • Neo4j Network Analysis    │
+    │  • Pattern Detection         │
+    └────────┬─────────────────────┘
+             │
+    ┌────────▼─────────────────────┐
+    │    Decision Engine + LLM     │
+    │  • Semantic Aggregation      │
+    │  • Rule-based Logic          │
+    │  • Explainable Decisions     │
+    └────────┬─────────────────────┘
+             │
+    ┌────────▼─────────────────────┐
+    │  APPROVE / REVIEW / REJECT   │
+    └──────────────────────────────┘
+```
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.9+
+- Docker & Docker Compose
+- 8GB+ RAM recommended
+
+### Installation
+
 ```bash
-# Clone repo
+# Clone repository
 git clone https://github.com/pranaya-mathur/ClaimLens_App
 cd ClaimLens_App
 
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # Windows: venv\\Scripts\\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your API keys (OpenAI, Groq, Neo4j credentials)
 ```
 
-### 2. Download Model Files
+### Model Setup
+
+Download required model files and place them in the `models/` directory:
+
+**Damage Detection Models:**
+- `yolo11n-seg-car-parts.pt` - Parts segmentation
+- `yolo11m-damage.pt` - Damage detection
+- `efficientnet-b0-severity.pth` - Severity classifier
+
+**Document Verification Models:**
+- `aadhaar_balanced_model.pth` - Aadhaar forgery detection
+- `resnet50_finetuned_after_strong_forgeries.pth` - PAN forgery detection
+
+**Legacy Models:**
+- `forgery_detector_latest_run.pth` - Generic forgery detection
+- `forgery_detector_latest_run_config.json` - Model configuration
+
+### Running the System
+
 ```bash
-# Place these files in models/ directory:
-
-# Damage Detection Models
-# - yolo11n-seg-car-parts.pt (parts segmentation)
-# - yolo11m-damage.pt (damage detection)
-# - efficientnet-b0-severity.pth (severity classifier)
-
-# Document Verification Models (NEW!)
-# - aadhaar_balanced_model.pth (Aadhaar forgery - 99.62% accuracy)
-# - resnet50_finetuned_after_strong_forgeries.pth (PAN forgery - 99.19% accuracy)
-
-# Legacy Forgery Models
-# - forgery_detector_latest_run.pth (generic forgery detection)
-# - forgery_detector_latest_run_config.json
-```
-
-### 3. Start Services (Docker)
-```bash
-# Start Neo4j + API
+# Start services (Neo4j + Redis)
 docker-compose up -d
 
-# Check services
-docker-compose ps
-```
-
-### 4. Load Data
-```bash
-# Prepare data
+# Load initial data
 python scripts/01_data_preparation.py
-
-# Load fraud graph
 python scripts/02_load_graph.py
-```
 
-### 5. Run API
-```bash
-# Start FastAPI server
-uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+# Start API server
+uvicorn api.main:app --host 0.0.0.0 --port 8000
 
-# API docs: http://localhost:8000/docs
-```
-
-### 6. Launch Dashboard
-```bash
+# Launch dashboard (new terminal)
 streamlit run frontend/streamlit_app.py
 ```
 
-## 📊 Architecture
+**Access Points:**
+- API Documentation: http://localhost:8000/docs
+- Streamlit Dashboard: http://localhost:8501
+- Neo4j Browser: http://localhost:7474
 
-```
-User Upload
-    ↓
-[CV Engine] → Damage Detection + Document Verification
-    ↓
-[ML Engine] → XGBoost Fraud Score + Narrative NLP
-    ↓
-[Fraud Graph] → Graph Risk Score (Neo4j)
-    ↓
-[Decision Engine] → Rules + LLM Explanation
-    ↓
-APPROVE / REVIEW / REJECT
-```
+## Key Features
 
-## 🔧 Tech Stack
+### 1. Document Verification System
 
-- **CV**: YOLOv11, ResNet50 (4-channel), EfficientNet, ELA
-- **ML**: XGBoost, CatBoost, Transformers
-- **Graph**: Neo4j, NetworkX
-- **API**: FastAPI, Pydantic
-- **Frontend**: Streamlit
-- **Infra**: Docker, Redis
+Production-ready identity document verification with enterprise-grade accuracy.
 
-## 📁 Project Structure
+#### Aadhaar Card Detection
+- **Architecture**: ResNet50 backbone with custom classification head
+- **Input**: 224×224 RGB images (ImageNet normalized)
+- **Training**: Balanced dataset with real and synthetic forgeries
+- **Deployment**: Sub-150ms inference time
 
-```
-ClaimLens/
-├── src/
-│   ├── cv_engine/              # Computer Vision
-│   │   ├── damage_detector.py         # YOLO-based damage detection
-│   │   ├── forgery_detector.py        # Generic forgery detection
-│   │   ├── aadhaar_detector.py        # Aadhaar card verification (NEW!)
-│   │   ├── pan_detector.py            # PAN card verification (NEW!)
-│   │   ├── document_verifier.py       # Unified document API (NEW!)
-│   │   ├── forgery_models.py          # CNN architectures (3ch + 4ch)
-│   │   └── forgery_utils.py           # ELA & noise analysis
-│   ├── fraud_engine/           # Graph analytics
-│   └── app/                    # Core application
-├── api/                        # FastAPI backend
-├── frontend/                   # Streamlit UI
-├── scripts/                    # Data pipelines
-├── models/                     # Trained models (.pth, .pt)
-├── tests/                      # Test suites (75+ tests)
-└── data/                       # Datasets
-```
+#### PAN Card Detection
+- **Architecture**: ResNet50 with 4-channel input (RGB + Error Level Analysis)
+- **Input**: 320×320 images with ELA forensics layer
+- **Detections**: Copy-move forgeries, text overlays, print-scan artifacts, compression manipulation
+- **Modes**: F1-optimal, precision-oriented, and balanced thresholds
 
-## 🎯 Key Features
-
-### 1️⃣ Vehicle Damage Detection
-**Multi-Model Pipeline:**
-- **Parts Segmentation** (YOLO11n-seg) - 23 car part classes
-- **Damage Detection** (YOLO11m) - 6 damage types (dent, scratch, crack, etc.)
-- **Severity Classification** (EfficientNet-B0) - 3 levels (minor, moderate, severe)
-
-**Capabilities:**
-- Detect dents, scratches, cracks, glass shatters, tire flats, broken lamps
-- Auto cost estimation based on damage severity
-- Sub-second inference per image
-
-### 2️⃣ Document Verification System **NEW! ✨**
-
-#### **Aadhaar Card Forgery Detection**
-**Performance Metrics:**
-- ✅ **99.62% Validation Accuracy**
-- ✅ **99.80% Balanced Accuracy** (critical for imbalanced data)
-- ✅ **AUC: 0.9999**
-- ✅ **0 False Negatives** in validation (530 forged samples)
-- ✅ **7 False Positives** out of 1,060 total samples
-
-**Model Architecture:**
-- Backbone: ResNet50 (ImageNet pretrained)
-- Input: 224×224 RGB images
-- Head: Simple Linear(2048 → 2)
-- Training: 2,116 real + 2,116 synthetic forgeries
-- Threshold: 0.5 (balanced)
-
-**Usage:**
-```python
-from src.cv_engine import AadhaarForgeryDetector
-
-detector = AadhaarForgeryDetector()
-result = detector.analyze("aadhaar_card.jpg")
-
-print(f"Verdict: {result.verdict}")  # "AUTHENTIC" or "FORGED"
-print(f"Confidence: {result.confidence:.2%}")
-print(f"Authentic Probability: {result.authentic_probability:.2%}")
-```
-
-#### **PAN Card Forgery Detection**
-**Performance Metrics:**
-- ✅ **99.19% Accuracy @ threshold 0.5**
-- ✅ **AUC: 0.9996**
-- ✅ **F1 Score: 0.9942 @ threshold 0.49** (optimal)
-- ✅ **95%+ Precision @ threshold 0.48** (precision mode)
-- ✅ **Only 11 errors** out of 1,350 samples (9 FP, 2 FN)
-
-**Model Architecture:**
-- Backbone: ResNet50 with **4-channel input (RGB + ELA)**
-- Input: 320×320 (RGB + Error Level Analysis)
-- Output: Single logit (BCEWithLogitsLoss)
-- Training: 640 initial + 550 strong forgeries (fine-tuned)
-- Threshold Modes:
-  - **0.49** = F1-optimal (balanced)
-  - **0.48** = Precision-oriented (minimize false accusations)
-  - **0.50** = Standard balanced
-
-**Detects:**
-- Copy-move forgeries (patch duplication)
-- Text overlays (DOB/name alterations)
-- Print-scan artifacts
-- JPEG compression manipulation
-- Frequency domain tampering
-
-**Usage:**
-```python
-from src.cv_engine import PANForgeryDetector
-
-# F1-optimal mode (default)
-detector = PANForgeryDetector(threshold=0.49)
-result = detector.analyze("pan_card.jpg")
-
-print(f"Verdict: {result.verdict}")  # "CLEAN" or "FORGED"
-print(f"Forgery Probability: {result.forgery_probability:.2%}")
-
-# Switch to precision mode for critical cases
-detector.set_threshold(mode="precision_oriented")
-result = detector.analyze("high_stakes_pan.jpg")
-```
-
-#### **Unified Document Verification API**
-**Dual-Check Mode for Cross-Validation:**
+#### Unified API with Dual-Check
 ```python
 from src.cv_engine import DocumentVerifier
 
 verifier = DocumentVerifier()
 
-# Single-check (standard)
+# Single document verification
 result = verifier.verify("aadhaar.jpg", doc_type="AADHAAR")
 
-# Dual-check (high-stakes fraud investigation)
+# High-stakes dual-check mode
 result = verifier.verify(
-    "suspicious_pan.jpg", 
+    "pan_card.jpg", 
     doc_type="PAN", 
-    dual_check=True  # Runs both PAN and Aadhaar detectors
+    dual_check=True  # Cross-validates with both detectors
 )
-
-if result.agreement:
-    print(f"Both detectors agree: {result.consensus_verdict}")
-    print(f"Consensus confidence: {result.consensus_confidence:.2%}")
-else:
-    print("⚠️ SUSPICIOUS - Detectors disagree, manual review required")
 
 # Batch processing
 results = verifier.verify_batch(
     ["doc1.jpg", "doc2.jpg", "doc3.jpg"],
-    doc_type="PAN",
-    dual_check=False
+    doc_type="PAN"
 )
 ```
 
 **Consensus Logic:**
-- ✅ Both agree **CLEAN** → High confidence authentic
-- ✅ Both agree **FORGED** → High confidence forgery
-- ⚠️ **Disagree** → Flagged as **SUSPICIOUS** for manual review
+- ✅ Both detectors agree on CLEAN → High confidence authentic
+- ✅ Both detectors agree on FORGED → High confidence forgery
+- ⚠️ Disagreement → Flagged as SUSPICIOUS for manual review
 
-### 3️⃣ Generic Image Forgery Detection
-**Hybrid CNN + Forensics Approach:**
-- **Deep Learning** - ResNet50 binary classifier (83.6% validation accuracy)
-- **Error Level Analysis (ELA)** - Detects JPEG compression inconsistencies
-- **Noise Variation** - Identifies spliced/pasted regions
+### 2. Vehicle Damage Detection
 
-**Training Details:**
-- Model: ResNet50 with custom classification head
-- Epochs: 15 | Learning Rate: 0.0001 | Threshold: 0.55
-- Input: 224×224 RGB images with ImageNet normalization
-- Output: Forgery probability (0-1) + ELA score + noise metrics
+Multi-stage computer vision pipeline for comprehensive damage assessment.
 
-**Usage:**
+**Pipeline Stages:**
+1. **Parts Segmentation** (YOLO11n-seg) - Identifies 23 vehicle component classes
+2. **Damage Detection** (YOLO11m) - Classifies 6 damage types (dent, scratch, crack, shatter, flat, broken)
+3. **Severity Assessment** (EfficientNet-B0) - Categorizes as minor, moderate, or severe
+
+**Capabilities:**
+- Automated cost estimation based on damage severity
+- Sub-second inference per image
+- Detailed damage localization with bounding boxes
+
+### 3. Generic Forgery Detection
+
+Hybrid deep learning and forensics approach for image manipulation detection.
+
+**Techniques:**
+- **Deep Learning**: ResNet50 binary classifier trained on forgery datasets
+- **Error Level Analysis (ELA)**: Detects JPEG compression inconsistencies
+- **Noise Variation Analysis**: Identifies spliced or pasted regions
+
 ```python
 from src.cv_engine import ForgeryDetector
 
@@ -260,122 +199,102 @@ detector = ForgeryDetector(
 )
 
 result = detector.analyze_image("claim_photo.jpg")
-print(f"Is Forged: {result.is_forged}")
+print(f"Forgery Detected: {result.is_forged}")
 print(f"Confidence: {result.forgery_prob:.2%}")
-print(f"ELA Score: {result.ela_score:.3f}")
 ```
 
-### 4️⃣ Fraud Graph Engine
-**Network Analysis:**
-- Find fraud rings (shared docs/images)
-- Serial fraudster detection
-- Policy abuse patterns
+### 4. Fraud Graph Analytics
+
+Neo4j-powered network analysis for detecting organized fraud patterns.
+
+**Detection Capabilities:**
+- Fraud ring identification through shared documents
+- Serial fraudster tracking across multiple claims
+- Document reuse pattern recognition
+- Policy abuse detection
 - Community detection algorithms
 
-**Graph Queries:**
-- Sub-100ms query performance
-- Neo4j integration
-- Real-time fraud network updates
+**Performance:**
+- Sub-100ms query execution
+- Real-time graph updates
+- Scalable to millions of nodes
 
-### 5️⃣ ML Risk Scoring
-**Planned Features:**
-- 90%+ AUC fraud classifier (XGBoost/CatBoost)
-- Narrative embedding + red flags (NLP)
-- Time-delay risk analysis
-- Hospital/vendor anomaly detection
+### 5. Semantic Decision Engine
 
-### 6️⃣ Fast Decision Engine
-**Decision Framework:**
-- Sub-2-second end-to-end processing
-- Auto-approve low risk claims
-- LLM-powered explanations
-- Complete audit trail
+Advanced decision-making with LLM-powered explainability.
 
-## 📈 Performance Metrics
+**Features:**
+- **Semantic Aggregation**: Converts raw model outputs to human-interpretable verdicts
+- **Rule-based Logic**: Configurable business rules for approval thresholds
+- **LLM Explanations**: Dual-audience prompts (technical for adjusters, simplified for customers)
+- **Audit Trail**: Complete decision provenance tracking
 
-| Component | Metric | Performance |
-|-----------|--------|-------------|
-| **Aadhaar Verification** | Validation Accuracy | **99.62%** |
-| **Aadhaar Verification** | Balanced Accuracy | **99.80%** |
-| **Aadhaar Verification** | AUC | **0.9999** |
-| **PAN Verification** | Accuracy @ 0.5 | **99.19%** |
-| **PAN Verification** | AUC | **0.9996** |
-| **PAN Verification** | F1 Score @ 0.49 | **0.9942** |
-| **Document Verification** | Inference Time | <150ms |
-| **Generic Forgery** | Validation Accuracy | **83.6%** |
-| **Damage Detection** | Parts Detection | 23 classes |
-| **Damage Detection** | Damage Types | 6 categories |
-| **Graph Queries** | Query Speed | <100ms |
-| **Overall System** | Processing Time | <2s per claim |
-| **Overall System** | Target FPR | <5% |
+### 6. Modern Streamlit Dashboard
 
-## 🧪 Testing
+State-of-the-art interface with live streaming and interactive visualizations.
 
-**Test Coverage: 75+ comprehensive tests**
+**Components:**
+- Real-time confidence meters and risk gauges
+- Interactive fraud network graphs
+- Live claim processing streams
+- Document verification results with visual overlays
+- Damage detection annotations
 
-```bash
-# Test document verification modules
-pytest tests/test_aadhaar_detector.py -v
-pytest tests/test_pan_detector.py -v
-pytest tests/test_document_verifier.py -v
+## Technology Stack
 
-# Test generic forgery detection
-python tests/test_forgery_detector.py
+| Layer | Technologies |
+|-------|-------------|
+| **Computer Vision** | YOLOv11, ResNet50, EfficientNet, Error Level Analysis |
+| **Machine Learning** | XGBoost, CatBoost, Sentence Transformers |
+| **Graph Database** | Neo4j, NetworkX |
+| **Backend API** | FastAPI, Pydantic, Uvicorn |
+| **LLM Integration** | LangChain, OpenAI, Groq |
+| **Frontend** | Streamlit, Plotly |
+| **Infrastructure** | Docker, Docker Compose, Redis |
+| **Testing** | Pytest, unittest, mock |
 
-# Test CV integration
-python tests/test_cv_integration.py
+## Project Structure
 
-# Run all tests
-pytest tests/ -v
+```
+ClaimLens_App/
+├── src/
+│   ├── cv_engine/              # Computer vision modules
+│   │   ├── damage_detector.py
+│   │   ├── aadhaar_detector.py
+│   │   ├── pan_detector.py
+│   │   ├── document_verifier.py
+│   │   ├── forgery_detector.py
+│   │   └── forgery_utils.py
+│   ├── fraud_engine/           # Graph analytics
+│   ├── ml_engine/              # ML scoring models
+│   ├── explainability/         # LLM explainer
+│   └── app/                    # Core application logic
+├── api/                        # FastAPI routes
+├── frontend/                   # Streamlit dashboard
+├── scripts/                    # Data preparation & ingestion
+├── tests/                      # Comprehensive test suite
+├── models/                     # Trained model files
+├── config/                     # Configuration files
+├── docs/                       # Additional documentation
+└── docker-compose.yml          # Service orchestration
 ```
 
-**Test Categories:**
-- ✅ Unit tests (model initialization, inference)
-- ✅ Integration tests (dual-check, consensus)
-- ✅ Error handling (missing files, invalid images)
-- ✅ Batch processing validation
-- ✅ Threshold boundary testing
-- ✅ Mock-based (CI/CD compatible)
+## API Reference
 
-## 🔄 Development Roadmap
+### Document Verification
 
-### ✅ Completed
-- [x] Vehicle damage detection pipeline (YOLO + EfficientNet)
-- [x] **Aadhaar card forgery detection (99.62% accuracy)**
-- [x] **PAN card forgery detection (99.19% accuracy)**
-- [x] **Unified document verification API with dual-check**
-- [x] **75+ unit and integration tests**
-- [x] Generic forgery detection system (ResNet50 + ELA)
-- [x] Fraud graph database (Neo4j)
-- [x] API endpoints (FastAPI)
-- [x] Docker containerization
+```http
+POST /verify/aadhaar
+Content-Type: application/json
 
-### 🚧 In Progress
-- [ ] ML risk scoring engine (XGBoost)
-- [ ] Duplicate image detection
-- [ ] Metadata verification (EXIF)
-- [ ] Multi-image consistency checks
-
-### 📋 Planned
-- [ ] Passport verification
-- [ ] Driver's license verification
-- [ ] GAN-generated image detection
-- [ ] Real-time monitoring dashboard
-- [ ] Model serving optimization
-- [ ] A/B testing framework
-
-## 📚 API Documentation
-
-### Document Verification Endpoints
-
-```python
-# POST /verify/aadhaar
 {
   "image": "base64_encoded_image",
   "dual_check": false
 }
+```
 
-# Response
+**Response:**
+```json
 {
   "document_type": "AADHAAR",
   "verdict": "AUTHENTIC",
@@ -383,30 +302,40 @@ pytest tests/ -v
   "authentic_probability": 0.9845,
   "forged_probability": 0.0155
 }
+```
 
-# POST /verify/pan
+### PAN Verification
+
+```http
+POST /verify/pan
+Content-Type: application/json
+
 {
   "image": "base64_encoded_image",
-  "threshold_mode": "f1_optimal"  # or "precision_oriented", "balanced"
+  "threshold_mode": "f1_optimal"
 }
+```
 
-# Response
-{
-  "document_type": "PAN",
-  "verdict": "CLEAN",
-  "confidence": 0.9612,
-  "forgery_probability": 0.0388,
-  "clean_probability": 0.9612
-}
+**Threshold Modes:**
+- `f1_optimal` - Balanced performance (default)
+- `precision_oriented` - Minimizes false positives
+- `balanced` - Standard threshold
 
-# POST /verify/document (unified)
+### Unified Verification with Dual-Check
+
+```http
+POST /verify/document
+Content-Type: application/json
+
 {
   "image": "base64_encoded_image",
-  "doc_type": "PAN",  # or "AADHAAR"
+  "doc_type": "PAN",
   "dual_check": true
 }
+```
 
-# Response (with dual-check)
+**Response (Dual-Check Enabled):**
+```json
 {
   "document_type": "PAN",
   "verdict": "CLEAN",
@@ -418,28 +347,79 @@ pytest tests/ -v
 }
 ```
 
-## 🤝 Contributing
+## Testing
 
-Contributions welcome! Please:
+Comprehensive test suite with unit, integration, and end-to-end tests.
+
+```bash
+# Test document verification
+pytest tests/test_aadhaar_detector.py -v
+pytest tests/test_pan_detector.py -v
+pytest tests/test_document_verifier.py -v
+
+# Test CV components
+pytest tests/test_cv_integration.py -v
+
+# Run all tests
+pytest tests/ -v --cov=src
+```
+
+**Test Coverage:**
+- ✅ Model initialization and loading
+- ✅ Inference accuracy validation
+- ✅ Dual-check consensus logic
+- ✅ Batch processing workflows
+- ✅ Error handling edge cases
+- ✅ Mock-based tests for CI/CD
+
+## Roadmap
+
+### Recently Completed
+- ✅ Document verification system (Aadhaar & PAN)
+- ✅ Vehicle damage detection pipeline
+- ✅ Fraud graph database integration
+- ✅ LLM-powered explainability
+- ✅ Semantic aggregation engine
+- ✅ Modern Streamlit dashboard
+- ✅ Docker containerization
+
+### In Progress
+- 🚧 XGBoost fraud scoring engine
+- 🚧 Duplicate image detection
+- 🚧 EXIF metadata verification
+- 🚧 Multi-image consistency checks
+
+### Planned
+- 📋 Passport and driver's license verification
+- 📋 GAN-generated image detection
+- 📋 Real-time monitoring dashboard
+- 📋 Model serving optimization (ONNX, TensorRT)
+- 📋 A/B testing framework
+- 📋 Kubernetes deployment configs
+
+## Contributing
+
+We welcome contributions! Please follow these guidelines:
+
 1. Fork the repository
-2. Create a feature branch
-3. Add tests for new features
-4. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Write tests for new functionality
+4. Ensure all tests pass (`pytest tests/`)
+5. Commit with clear messages (`git commit -m 'Add amazing feature'`)
+6. Push to your branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
 
-## 👨‍💻 Team
+## License
 
-Built by **Pranaya Mathur** & Team
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 📄 License
+## Contact
 
-MIT License
+**Pranaya Mathur**
 
-## 📞 Contact
-
-For questions or collaboration: [GitHub Issues](https://github.com/pranaya-mathur/ClaimLens_App/issues)
+- GitHub: [@pranaya-mathur](https://github.com/pranaya-mathur)
+- Issues: [GitHub Issues](https://github.com/pranaya-mathur/ClaimLens_App/issues)
 
 ---
 
-**⚡ Built with AI, optimized for fraud detection at scale**
-
-**Latest Update:** Document verification system with 99%+ accuracy for Indian identity documents (Aadhaar & PAN)
+**Built with ❤️ using cutting-edge AI • Optimized for fraud detection at scale**
