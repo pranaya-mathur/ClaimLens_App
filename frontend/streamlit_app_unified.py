@@ -13,8 +13,8 @@ import json
 from typing import Dict, Optional
 import time
 
-# Configuration
-API_URL = "http://localhost:8000"
+# Configuration - Use 127.0.0.1 instead of localhost
+API_URL = "http://127.0.0.1:8000"
 UNIFIED_ENDPOINT = f"{API_URL}/api/unified/analyze-complete"
 
 st.set_page_config(
@@ -97,7 +97,8 @@ def check_api_health() -> bool:
     try:
         response = requests.get(f"{API_URL}/health/", timeout=2)
         return response.status_code == 200
-    except:
+    except Exception as e:
+        st.write(f"Debug: {e}")
         return False
 
 
@@ -277,7 +278,7 @@ with st.sidebar:
         st.success("✅ API Connected")
     else:
         st.error("❌ Cannot connect to API")
-        st.code("# Start API with:\npython -m uvicorn api.main:app --reload", language="bash")
+        st.code(f"# API should be at: {API_URL}\n# Start with:\npython -m uvicorn api.main:app --reload", language="bash")
     
     st.markdown("---")
     st.markdown("### ⚙️ System Components")
@@ -328,7 +329,8 @@ if "Claim Analysis" in page:
     st.markdown("---")
     
     if not check_api_health():
-        st.error("❌ API not running! Start with: `python -m uvicorn api.main:app --reload`")
+        st.error(f"❌ API not running! Make sure API is at {API_URL}")
+        st.code("python -m uvicorn api.main:app --reload", language="bash")
     else:
         st.markdown("## 🎯 Analyze Claim (All 4 Engines)")
         
