@@ -95,7 +95,7 @@ st.markdown("""
 def check_api_health() -> bool:
     """Check if API is running"""
     try:
-        response = requests.get(f"{API_URL}/health/liveness", timeout=2)
+        response = requests.get(f"{API_URL}/health/", timeout=2)
         return response.status_code == 200
     except:
         return False
