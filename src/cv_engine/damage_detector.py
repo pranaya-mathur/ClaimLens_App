@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 from pathlib import Path
 from loguru import logger
 import os
+import shutil
 
 # Try timm first (for training compatibility), fallback to torchvision
 try:
@@ -23,6 +24,34 @@ except ImportError:
     from torchvision.models import efficientnet_b0
     USE_TIMM = False
     logger.warning("timm not found, using torchvision (may have compatibility issues)")
+
+
+def _convert_pth_to_pt(model_path: str) -> str:
+    """
+    Convert .pth model to .pt format for Ultralytics YOLO compatibility.
+    Ultralytics YOLO expects .pt extension for PyTorch models.
+    This creates a copy with .pt extension if .pth is provided.
+    
+    Args:
+        model_path: Path to model (.pth or .pt)
+        
+    Returns:
+        Path to .pt model (either original or newly created)
+    """
+    model_path = str(model_path)
+    
+    if model_path.endswith('.pt'):
+        return model_path
+    
+    if model_path.endswith('.pth'):
+        pt_path = model_path.replace('.pth', '.pt')
+        if not os.path.exists(pt_path):
+            logger.info(f"Converting {model_path} -> {pt_path}")
+            shutil.copy2(model_path, pt_path)
+            logger.success(f"Model converted for YOLO loading")
+        return pt_path
+    
+    return model_path
 
 
 class DamageDetector:
@@ -79,13 +108,15 @@ class DamageDetector:
             f"dimensions={self.MIN_IMAGE_DIM}-{self.MAX_IMAGE_DIM}px"
         )
         
-        # Load YOLO models
+        # Load YOLO models (convert .pth to .pt if needed)
         logger.info("Loading parts segmentation model...")
-        self.parts_model = YOLO(parts_model_path)
+        parts_model_ready = _convert_pth_to_pt(parts_model_path)
+        self.parts_model = YOLO(parts_model_ready)
         self.parts_model.to(device)
         
         logger.info("Loading damage detection model...")
-        self.damage_model = YOLO(damage_model_path)
+        damage_model_ready = _convert_pth_to_pt(damage_model_path)
+        self.damage_model = YOLO(damage_model_ready)
         self.damage_model.to(device)
         
         # Load severity classifier
