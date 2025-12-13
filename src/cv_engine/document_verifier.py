@@ -95,14 +95,14 @@ class DocumentVerifier:
         
         try:
             self.aadhaar_detector = AadhaarForgeryDetector(device=device)
-            logger.success("✓ Aadhaar detector loaded")
+            logger.success("Aadhaar detector loaded")
         except Exception as e:
             logger.warning(f"Aadhaar detector not available: {e}")
             self.aadhaar_detector = None
         
         try:
             self.pan_detector = PANForgeryDetector(device=device)
-            logger.success("✓ PAN detector loaded")
+            logger.success("PAN detector loaded")
         except Exception as e:
             logger.warning(f"PAN detector not available: {e}")
             self.pan_detector = None
@@ -114,7 +114,7 @@ class DocumentVerifier:
                 "\n- models/resnet50_finetuned_after_strong_forgeries.pth"
             )
         
-        logger.success("✓ DocumentVerifier initialized successfully")
+        logger.success("DocumentVerifier initialized successfully")
     
     def verify(
         self,

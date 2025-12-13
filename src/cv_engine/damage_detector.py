@@ -104,7 +104,7 @@ class DamageDetector:
             )
         ])
         
-        logger.success("✓ All models loaded successfully")
+        logger.success("All models loaded successfully")
     
     def _validate_image(self, image_path: str) -> None:
         """
@@ -353,7 +353,7 @@ class DamageDetector:
                 image, parts_detected, damages_detected
             )
         
-        logger.success("✓ Damage detection complete")
+        logger.success("Damage detection complete")
         return results
     
     def _classify_severity(self, crop_image: np.ndarray) -> Dict:
