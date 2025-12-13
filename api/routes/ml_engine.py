@@ -105,7 +105,19 @@ def get_ml_scorer() -> MLFraudScorer:
                 metadata_path=metadata_path,
                 threshold=threshold
             )
-            logger.success("✅ MLFraudScorer loaded successfully")
+            
+            # Verify expected features were loaded
+            if _scorer.expected_features:
+                logger.success(
+                    f"✅ MLFraudScorer loaded successfully with "
+                    f"{len(_scorer.expected_features)} expected features"
+                )
+            else:
+                logger.warning(
+                    "⚠️ MLFraudScorer loaded but no expected features found! "
+                    "Feature alignment may not work correctly."
+                )
+                
         except FileNotFoundError as e:
             logger.error(f"Model files not found: {e}")
             raise HTTPException(
@@ -136,16 +148,40 @@ def get_feature_engineer() -> FeatureEngineer:
         logger.info(f"Embedding model: {embedding_model}")
         
         try:
-            # 🔧 NEW: Get expected features from scorer and pass to engineer
-            scorer = get_ml_scorer()
+            # 🔧 CRITICAL FIX: Get expected features from scorer FIRST
+            scorer = get_ml_scorer()  # This loads the model and expected_features
             expected_features = scorer.expected_features if scorer else None
+            
+            if expected_features:
+                logger.info(
+                    f"🎯 Passing {len(expected_features)} expected features to FeatureEngineer "
+                    f"for schema alignment"
+                )
+                logger.debug(f"Sample expected features: {expected_features[:5]}")
+            else:
+                logger.warning(
+                    "⚠️ No expected features available from model! "
+                    "Feature alignment will be SKIPPED. This may cause incorrect predictions."
+                )
             
             _feature_engineer = FeatureEngineer(
                 pca_dims=pca_dims,
                 model_name=embedding_model,
-                expected_features=expected_features  # Pass expected features
+                expected_features=expected_features  # Pass expected features for alignment
             )
-            logger.success("✅ FeatureEngineer loaded successfully")
+            
+            # Verify feature engineer has expected features
+            if _feature_engineer.expected_features:
+                logger.success(
+                    f"✅ FeatureEngineer loaded successfully with feature alignment enabled "
+                    f"({len(_feature_engineer.expected_features)} features)"
+                )
+            else:
+                logger.warning(
+                    "⚠️ FeatureEngineer loaded but feature alignment is DISABLED. "
+                    "Predictions may be unreliable!"
+                )
+                
         except Exception as e:
             logger.error(f"Failed to load feature engineer: {e}")
             raise HTTPException(
@@ -485,16 +521,32 @@ async def ml_health_check():
     - Model loaded
     - Feature engineer initialized
     - Embedding model accessible
+    - Feature alignment enabled
     """
     try:
         scorer = get_ml_scorer()
         engineer = get_feature_engineer()
         
+        # Check feature alignment status
+        feature_alignment_enabled = (
+            scorer.expected_features is not None and 
+            engineer.expected_features is not None
+        )
+        
+        expected_feature_count = len(scorer.expected_features) if scorer.expected_features else 0
+        engineer_feature_count = len(engineer.expected_features) if engineer.expected_features else 0
+        
+        # Warn if feature alignment is not working
+        alignment_status = "enabled" if feature_alignment_enabled else "DISABLED (WARNING)"
+        
         return {
             "status": "healthy",
             "ml_scorer_loaded": scorer.model is not None,
             "feature_engineer_ready": engineer.pca is not None,
-            "model_features": len(scorer.expected_features) if scorer.expected_features else 0,
+            "feature_alignment_status": alignment_status,
+            "model_expected_features": expected_feature_count,
+            "engineer_expected_features": engineer_feature_count,
+            "feature_alignment_match": expected_feature_count == engineer_feature_count,
             "threshold": scorer.threshold,
             "embedder_model": engineer.model_name,
             "config": {
