@@ -8,21 +8,31 @@ router = APIRouter()
 
 @router.get("/")
 def health_check():
+    """Basic health check"""
     return {
         "status": "healthy",
         "service": "ClaimLens API",
-        "version": "1.0.0"
+        "version": "2.0.0"
     }
 
 
-@router.get("/ready")
+@router.get("/liveness")
+def liveness_check():
+    """Kubernetes-style liveness probe"""
+    return {"status": "ok"}
+
+
+@router.get("/readiness")
+@router.get("/ready")  # Backward compatibility
 def readiness_check():
-    # Add checks for Neo4j, Redis, etc.
+    """Kubernetes-style readiness probe"""
+    # Add checks for Neo4j, Redis, etc. if needed
     return {
         "ready": True,
+        "status": "ok",
         "services": {
             "api": "up",
-            "neo4j": "connected",
-            "redis": "connected"
+            "neo4j": "unknown",
+            "redis": "unknown"
         }
     }
