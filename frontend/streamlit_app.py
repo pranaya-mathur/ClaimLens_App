@@ -380,13 +380,13 @@ if "AI-Powered" in page:
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
             
-            # Graph Analysis
+            # Graph Analysis - FIXED: Send claim_id as string
             with comp_col3:
                 st.markdown("#### 🕸️ Graph Analysis")
                 try:
                     graph_response = requests.post(
                         f"{API_URL}/api/fraud/score",
-                        json={"claim_id": int(claim_id.replace("CLM", "")) if claim_id.replace("CLM", "").isdigit() else 8000001},
+                        json={"claim_id": claim_id},  # ✅ FIXED: Send as string directly
                         timeout=10
                     )
                     
@@ -405,11 +405,11 @@ if "AI-Powered" in page:
                         st.metric("Network Score", "88%")
                         st.caption("No fraud network detected" if fraud_count == 0 else f"{fraud_count} suspicious connections")
                     else:
-                        st.info("Graph data unavailable")
+                        st.info(f"Graph data unavailable (Status: {graph_response.status_code})")
                         st.caption("Requires Neo4j database")
                 
-                except:
-                    st.info("Graph analysis offline")
+                except Exception as e:
+                    st.info(f"Graph analysis offline: {str(e)}")
                     st.caption("Start Neo4j to enable")
             
             st.markdown("---")
