@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     
+    # ========================================
+    # ML Engine Configuration (CatBoost Fraud Detection)
+    # ========================================
+    ML_MODEL_PATH: str = "models/ml_engine/claimlens_catboost_hinglish.cbm"
+    ML_METADATA_PATH: str = "models/ml_engine/claimlens_model_metadata.json"
+    ML_THRESHOLD: float = 0.5  # Fraud classification threshold
+    ML_PCA_DIMS: int = 100  # PCA dimensions for narrative embeddings
+    ML_EMBEDDING_MODEL: str = "l3cube-pune/indic-sentence-similarity-sbert"  # Hinglish embeddings
+    
     # CV Model Paths - Damage Detection
     PARTS_MODEL_PATH: str = "models/parts_segmentation/yolo11n_best.pth"
     DAMAGE_MODEL_PATH: str = "models/damage_detection/yolo11m_best.pth"
@@ -57,20 +66,20 @@ class Settings(BaseSettings):
     BATCH_SIZE: int = 32
     CV_DEVICE: str = "cpu"  # Default to CPU, set to 'cuda' in .env if GPU available
     
-    # LLM Configuration (NEW!)
+    # LLM Configuration
     GROQ_API_KEY: Optional[str] = None  # Get from https://console.groq.com/
     OPENAI_API_KEY: Optional[str] = None
     
-    # LLM Feature Flags (NEW!)
+    # LLM Feature Flags
     ENABLE_SEMANTIC_AGGREGATION: bool = True
     ENABLE_LLM_EXPLANATIONS: bool = True
     
-    # LLM Model Configuration (NEW!)
+    # LLM Model Configuration
     LLM_MODEL: str = "llama-3.3-70b-versatile"
     LLM_TEMPERATURE: float = 0.1
     LLM_MAX_TOKENS: int = 1024
     
-    # Explanation Generator Configuration (NEW!)
+    # Explanation Generator Configuration
     EXPLANATION_MODEL: str = "llama-3.3-70b-versatile"
     EXPLANATION_TEMPERATURE: float = 0.3
     EXPLANATION_MAX_TOKENS: int = 512
