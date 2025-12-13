@@ -1,9 +1,9 @@
 @echo off
-REM Streamlit Frontend Startup Script for ClaimLens AI
+REM Streamlit Frontend Startup Script for ClaimLens AI v2.0 SOTA
 
 echo.
 echo ======================================================================
-echo                      CLAIMLENS STREAMLIT FRONTEND
+echo                CLAIMLENS V2.0 SOTA STREAMLIT FRONTEND
 echo ======================================================================
 echo.
 
@@ -25,15 +25,22 @@ if %errorlevel% neq 0 (
 echo Backend API: RUNNING ✓
 echo.
 
-echo [STEP 2/2] Starting Streamlit frontend...
+echo [STEP 2/2] Starting Streamlit v2.0 SOTA frontend...
 echo.
 echo ======================================================================
-echo  Streamlit will open in your browser at: http://localhost:8501
-echo  Press CTRL+C to stop the server
+echo  Features:
+ echo   - Glassmorphism UI
+ echo   - Real-time ML scoring
+ echo   - Document verification
+ echo   - Fraud network graphs
+ echo   - AI explanations
+echo.
+echo  Opening at: http://localhost:8501
+echo  Press CTRL+C to stop
 echo ======================================================================
 echo.
 
-REM Start Streamlit
-streamlit run frontend/streamlit_app.py --server.port 8501 --server.address localhost
+REM Start Streamlit with v2 SOTA version
+streamlit run frontend/streamlit_app_v2_sota.py --server.port 8501 --server.address localhost
 
 pause
