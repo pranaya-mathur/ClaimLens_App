@@ -315,6 +315,39 @@ class FeatureEngineer:
             logger.error(f"Error generating embeddings: {e}")
             raise
 
+    def _normalize_column_names(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Normalize column names to match trained model expectations.
+        
+        Converts snake_case to lowercase without underscores.
+        Example: 'days_since_policy_start' -> 'dayssincepolicystart'
+        
+        Args:
+            df: DataFrame with feature columns
+            
+        Returns:
+            DataFrame with normalized column names
+        """
+        logger.debug("Normalizing column names to match model format...")
+        
+        # Save ID columns if they exist
+        id_cols = [c for c in ['claim_id', 'claimant_id', 'policy_id'] if c in df.columns]
+        
+        # Create mapping for normalization
+        rename_map = {}
+        for col in df.columns:
+            if col not in id_cols:  # Don't rename ID columns
+                # Remove underscores and convert to lowercase
+                normalized = col.replace('_', '').lower()
+                if col != normalized:
+                    rename_map[col] = normalized
+        
+        if rename_map:
+            df = df.rename(columns=rename_map)
+            logger.debug(f"Renamed {len(rename_map)} columns to model format")
+        
+        return df
+
     def engineer_features(
         self,
         df: pd.DataFrame,
@@ -330,7 +363,7 @@ class FeatureEngineer:
                      Default: True (keeps IDs for tracking)
             
         Returns:
-            Feature matrix with embeddings + engineered features
+            Feature matrix with embeddings + engineered features (normalized column names)
         """
         logger.info(f"Starting feature engineering pipeline for {len(df)} claims...")
         
@@ -363,7 +396,7 @@ class FeatureEngineer:
                 axis=1,
             )
             
-            # Keep IDs if requested
+            # Keep IDs if requested (before normalization)
             if keep_ids:
                 id_cols = ["claim_id", "claimant_id", "policy_id"]
                 existing_ids = [c for c in id_cols if c in df.columns]
@@ -373,6 +406,9 @@ class FeatureEngineer:
                     logger.info(f"Kept ID columns: {existing_ids}")
             else:
                 logger.info("ID columns excluded from feature matrix")
+            
+            # Normalize column names to match model
+            feature_df = self._normalize_column_names(feature_df)
             
             logger.success(
                 f"Feature engineering complete! "
