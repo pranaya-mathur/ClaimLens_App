@@ -1,0 +1,10 @@
+# This commit removes temporary markdown files
+# Files removed:
+# - FINAL_CHECKLIST.md
+# - FIXES_APPLIED.md  
+# - FIX_VERIFICATION.md
+# - RESET_NOTES.md
+# - INTEGRATION_TEST_GUIDE.md
+# - VERIFICATION_CHECKLIST.md
+# - QUICK_START_V3.md
+# - LLM_DEPLOYMENT_QUICK_START.md
