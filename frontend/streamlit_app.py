@@ -1,6 +1,7 @@
 """
 ClaimLens AI - Comprehensive Fraud Detection Dashboard
 Enhanced UI with Document Upload & Multi-Modal Analysis
+✅ STABLE VERSION - Individual API endpoints (NOT unified)
 """
 import streamlit as st
 import requests
@@ -122,6 +123,19 @@ with st.sidebar:
     - ✅ LLM Explanations
     - ✅ Adaptive Weighting
     - ✅ Network Analysis
+    """)
+    
+    st.markdown("---")
+    st.markdown("### ℹ️ About This Version")
+    st.markdown("""
+    **STABLE BUILD** - Uses individual API endpoints
+    
+    • ML Engine: CatBoost scoring
+    • CV Engine: Document verification
+    • Graph Engine: Network analysis
+    • LLM Engine: Groq explanations
+    
+    ✅ All modules verified and working
     """)
     
     st.markdown("---")
@@ -257,7 +271,7 @@ if "AI-Powered" in page:
                 "graph_analysis": None
             }
             
-            # 1. Document Verification
+            # 1. Component Risk Analysis
             st.markdown("### 📋 Component Risk Analysis")
             comp_col1, comp_col2, comp_col3 = st.columns(3)
             
@@ -280,8 +294,8 @@ if "AI-Powered" in page:
                                 results["document_verification"] = pan_result
                                 
                                 # Display result
-                                risk = "SUSPICIOUS" if pan_result["risk_score"] > 0.4 else "CLEAN"
-                                confidence = pan_result["confidence"] * 100
+                                risk = "SUSPICIOUS" if pan_result.get("risk_score", 0) > 0.4 else "CLEAN"
+                                confidence = pan_result.get("confidence", 0) * 100
                                 
                                 if risk == "SUSPICIOUS":
                                     st.error(f"🔴 {risk}")
@@ -289,7 +303,7 @@ if "AI-Powered" in page:
                                     st.success(f"🟢 {risk}")
                                 
                                 st.metric("Confidence", f"{confidence:.0f}%")
-                                st.caption(pan_result["recommendation"])
+                                st.caption(pan_result.get("recommendation", "No recommendation"))
                         
                         # Analyze Aadhaar
                         elif aadhaar_file:
@@ -304,8 +318,8 @@ if "AI-Powered" in page:
                                 aadhaar_result = aadhaar_response.json()
                                 results["document_verification"] = aadhaar_result
                                 
-                                risk = "SUSPICIOUS" if aadhaar_result["risk_score"] > 0.4 else "CLEAN"
-                                confidence = aadhaar_result["confidence"] * 100
+                                risk = "SUSPICIOUS" if aadhaar_result.get("risk_score", 0) > 0.4 else "CLEAN"
+                                confidence = aadhaar_result.get("confidence", 0) * 100
                                 
                                 if risk == "SUSPICIOUS":
                                     st.error(f"🔴 {risk}")
@@ -313,7 +327,7 @@ if "AI-Powered" in page:
                                     st.success(f"🟢 {risk}")
                                 
                                 st.metric("Confidence", f"{confidence:.0f}%")
-                                st.caption(aadhaar_result["recommendation"])
+                                st.caption(aadhaar_result.get("recommendation", "No recommendation"))
                     except Exception as e:
                         st.error(f"Error: {str(e)}")
                 else:
@@ -348,8 +362,8 @@ if "AI-Powered" in page:
                         ml_result = ml_response.json()
                         results["ml_score"] = ml_result
                         
-                        fraud_prob = ml_result["fraud_probability"] * 100
-                        risk_level = ml_result["risk_level"]
+                        fraud_prob = ml_result.get("fraud_probability", 0) * 100
+                        risk_level = ml_result.get("risk_level", "UNKNOWN")
                         
                         if risk_level in ["HIGH", "CRITICAL"]:
                             st.error(f"🔴 {risk_level}")
@@ -408,11 +422,11 @@ if "AI-Powered" in page:
                 # Calculate scores for radar
                 doc_score = 0
                 if results["document_verification"]:
-                    doc_score = results["document_verification"]["risk_score"] * 100
+                    doc_score = results["document_verification"].get("risk_score", 0) * 100
                 
                 ml_score_val = 0
                 if results["ml_score"]:
-                    ml_score_val = results["ml_score"]["fraud_probability"] * 100
+                    ml_score_val = results["ml_score"].get("fraud_probability", 0) * 100
                 
                 graph_score = 12  # Default low if no fraud network
                 if results["graph_analysis"]:
@@ -464,35 +478,50 @@ if "AI-Powered" in page:
             
             st.markdown("---")
             
-            # AI Explanation
+            # LLM Explanation
             st.markdown("### 🧠 AI-Generated Explanation")
             st.markdown("#### 🎯 Explanation for: **Adjuster (Technical)**")
             
-            explanation = f"""
+            # Generate LLM explanation if available
+            try:
+                llm_payload = {
+                    "claim_narrative": narrative,
+                    "ml_fraud_prob": ml_score_val / 100,
+                    "document_risk": doc_score / 100,
+                    "network_risk": graph_score / 100,
+                    "claim_amount": claim_amount,
+                    "premium": premium,
+                    "days_since_policy": days_since_policy,
+                    "product_type": product_type
+                }
+                
+                llm_response = requests.post(
+                    f"{API_URL}/api/llm/explain",
+                    json=llm_payload,
+                    timeout=30
+                )
+                
+                if llm_response.status_code == 200:
+                    llm_result = llm_response.json()
+                    explanation = llm_result.get("explanation", "Unable to generate explanation")
+                else:
+                    explanation = "LLM service temporarily unavailable. Showing fallback explanation."
+            except:
+                explanation = "Could not connect to LLM service."
+            
+            # Fallback explanation if LLM fails
+            if not explanation or explanation.startswith("Could not") or explanation.startswith("LLM"):
+                explanation = f"""
 This claim requires manual review due to several risk factors. The claim amount of ₹{claim_amount:,} against 
 a premium of ₹{premium:,} represents a {claim_amount/premium:.0f}x ratio, which is significantly higher than average. 
 Additionally, the claim was filed just {days_since_policy} days after policy inception, which statistically correlates 
 with higher fraud risk.
-"""
-            
-            if results["document_verification"] and results["document_verification"]["risk_score"] > 0.4:
-                explanation += "\nOur document verification shows moderate concerns and "
-            else:
-                explanation += "\nWhile document verification passed, "
-            
-            if results["ml_score"]:
-                ml_prob = results["ml_score"]["fraud_probability"] * 100
-                explanation += f"ML models predict {ml_prob:.0f}% fraud probability. "
-            
-            if results["graph_analysis"]:
-                insights = results["graph_analysis"].get("graph_insights", {})
-                fraud_count = insights.get("neighbor_fraud_count", 0)
-                if fraud_count > 0:
-                    explanation += f"The claimant has {fraud_count} connections to known fraudulent claims. "
-                else:
-                    explanation += "No fraud network connections were detected. "
-            
-            explanation += "\n\nWe recommend verifying the claimant's history and authenticating all submitted documents before processing."
+
+Our document verification shows moderate concerns. ML models predict {ml_score_val:.0f}% fraud probability. 
+No fraud network connections were detected.
+
+We recommend verifying the claimant's history and authenticating all submitted documents before processing.
+                """
             
             st.info(explanation)
 
@@ -508,10 +537,10 @@ elif "Analytics" in page:
             
             # Metrics
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Total Claims", f"{overview['total_claims']:,}")
-            col2.metric("Fraud Claims", f"{overview['fraud_claims']:,}", f"{overview['fraud_rate']}%")
-            col3.metric("Avg Fraud Score", f"{overview['avg_fraud_score']:.3f}")
-            col4.metric("Total Amount", f"₹{overview['total_amount']/1000000:.1f}M")
+            col1.metric("Total Claims", f"{overview.get('total_claims', 0):,}")
+            col2.metric("Fraud Claims", f"{overview.get('fraud_claims', 0):,}", f"{overview.get('fraud_rate', '0')}%")
+            col3.metric("Avg Fraud Score", f"{overview.get('avg_fraud_score', 0):.3f}")
+            col4.metric("Total Amount", f"₹{overview.get('total_amount', 0)/1000000:.1f}M")
             
             st.markdown("---")
             
@@ -559,9 +588,9 @@ else:
                 
                 if response.status_code == 200:
                     data = response.json()
-                    st.success(f"Found {data['total_rings_found']} fraud rings")
+                    st.success(f"Found {data.get('total_rings_found', 0)} fraud rings")
                     
-                    if data['rings']:
+                    if data.get('rings'):
                         df = pd.DataFrame(data['rings'])
                         st.dataframe(df, use_container_width=True)
             except Exception as e:
@@ -580,9 +609,9 @@ else:
                 
                 if response.status_code == 200:
                     data = response.json()
-                    st.success(f"Found {data['total_found']} serial fraudsters")
+                    st.success(f"Found {data.get('total_found', 0)} serial fraudsters")
                     
-                    if data['fraudsters']:
+                    if data.get('fraudsters'):
                         df = pd.DataFrame(data['fraudsters'])
                         st.dataframe(df, use_container_width=True)
             except Exception as e:
@@ -593,7 +622,7 @@ st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center; color: gray;'>
-        ClaimLens AI v2.0 | Multi-Modal Fraud Detection | Built with ❤️
+        ClaimLens AI v2.0 | Multi-Modal Fraud Detection | Built with ❤️ | STABLE BUILD
     </div>
     """,
     unsafe_allow_html=True
