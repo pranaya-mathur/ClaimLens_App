@@ -1,246 +1,303 @@
-# ClaimLens - Insurance Fraud Detection System
+# 🤖 ClaimLens AI
 
-AI-powered fraud detection for insurance claims using computer vision, machine learning, and graph analytics.
+**AI-Powered Insurance Fraud Detection System**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+> Multi-modal fraud detection combining Machine Learning, Computer Vision, Graph Analytics, and Large Language Models
 
-## Overview
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com)
+[![LangChain](https://img.shields.io/badge/LangChain-0.3+-orange.svg)](https://langchain.com)
+[![Neo4j](https://img.shields.io/badge/Neo4j-5.0+-darkgreen.svg)](https://neo4j.com)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-ClaimLens is a fraud detection system that combines multiple AI techniques to analyze insurance claims. It verifies identity documents, assesses vehicle damage, scores fraud risk using machine learning, and detects fraud networks through graph analysis.
+---
 
-**Key Components:**
-- Document verification for Aadhaar and PAN cards using ResNet50
-- Vehicle damage detection with YOLO11 and EfficientNet
-- CatBoost-based fraud scoring with Hinglish text support
-- Neo4j graph database for fraud network detection
-- FastAPI backend with Streamlit dashboard
+## 🎯 **Overview**
 
-## Quick Start
+ClaimLens AI is an enterprise-grade fraud detection system that analyzes insurance claims using multiple AI modalities:
 
-### Prerequisites
+- **🧠 Machine Learning**: CatBoost model with 145 features for fraud probability scoring
+- **👁️ Computer Vision**: Document forgery detection using deep learning
+- **🕸️ Graph Analytics**: Network fraud ring detection via Neo4j
+- **💬 LLM Integration**: Natural language explanations powered by Groq's Llama-3.3-70B
 
-- Python 3.9+
-- Docker & Docker Compose
-- 8GB+ RAM
+### **Key Features**
 
-### Installation
+✅ **Multi-Modal Analysis** - Combines 4 AI engines for comprehensive fraud detection  
+✅ **Explainable AI** - Human-readable explanations for every decision  
+✅ **Real-Time Scoring** - Sub-second fraud probability predictions  
+✅ **Document Verification** - PAN/Aadhaar forgery detection with OCR  
+✅ **Network Detection** - Identifies fraud rings through graph relationships  
+✅ **Hinglish Support** - Processes claims in English and Hindi-English mix  
+✅ **Production Ready** - RESTful APIs with rate limiting and monitoring  
+
+---
+
+## 🚀 **Quick Start**
+
+### **Prerequisites**
+
+- Python 3.10+
+- Docker (for Neo4j)
+- Groq API Key ([Get free key](https://console.groq.com/))
+
+### **Installation**
 
 ```bash
-git clone https://github.com/pranaya-mathur/ClaimLens_App
+# Clone repository
+git clone https://github.com/pranaya-mathur/ClaimLens_App.git
 cd ClaimLens_App
 
+# Create virtual environment
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
+# Install dependencies
 pip install -r requirements.txt
 
+# Setup environment
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env and add your GROQ_API_KEY
 ```
 
-### Model Setup
-
-Place the following model files in the `models/` directory:
-
-**Computer Vision Models:**
-- `yolo11n-seg-car-parts.pt` - Vehicle parts segmentation
-- `yolo11m-damage.pt` - Damage detection
-- `efficientnet-b0-severity.pth` - Damage severity classification
-- `aadhaar_balanced_model.pth` - Aadhaar forgery detection
-- `resnet50_finetuned_after_strong_forgeries.pth` - PAN forgery detection
-
-**ML Models:**
-- `claimlens_catboost_hinglish.cbm` - Fraud scoring model
-- `claimlens_model_metadata.json` - Model metadata
-
-### Running
+### **Run the Application**
 
 ```bash
-# Start Neo4j and Redis
-docker-compose up -d
+# Terminal 1: Start FastAPI backend
+uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
-# Load data into graph database
-python scripts/01_data_preparation.py
-python scripts/02_load_graph.py
-
-# Start API server
-uvicorn api.main:app --host 0.0.0.0 --port 8000
-
-# Start dashboard (in new terminal)
+# Terminal 2: Start Streamlit frontend
 streamlit run frontend/streamlit_app.py
+
+# Optional: Start Neo4j (for graph analysis)
+docker-compose up neo4j -d
 ```
 
-**Access:**
-- API: http://localhost:8000/docs
-- Dashboard: http://localhost:8501
-- Neo4j: http://localhost:7474
+### **Verify Installation**
 
-## Features
-
-### Document Verification
-
-Detects forged Aadhaar and PAN cards using deep learning models.
-
-**Aadhaar Detection:**
-- ResNet50 classifier trained on balanced dataset (2,116 real + 2,116 synthetic forgeries)
-- 224x224 RGB input with ImageNet normalization
-- 99.6% validation accuracy
-
-**PAN Detection:**
-- ResNet50 with 4-channel input (RGB + Error Level Analysis)
-- Detects copy-move forgeries, text overlays, compression artifacts
-- Multiple threshold modes: f1_optimal, precision_oriented, balanced
-
-```python
-from src.cv_engine import DocumentVerifier
-
-verifier = DocumentVerifier()
-result = verifier.verify("aadhaar.jpg", doc_type="AADHAAR")
-print(f"{result.verdict}: {result.confidence:.2%}")
+```bash
+# Run diagnostic script
+python scripts/diagnose_app.py
 ```
 
-### Vehicle Damage Detection
-
-Three-stage pipeline for damage assessment:
-
-1. Parts Segmentation (YOLO11n-seg) - Identifies 23 vehicle components
-2. Damage Detection (YOLO11m) - Classifies 6 damage types
-3. Severity Classification (EfficientNet-B0) - Minor/moderate/severe
-
-### Fraud Scoring
-
-CatBoost model trained on 50,000 Hinglish claims with 145 features including:
-- Bhasha-Embed narrative embeddings (100-dim PCA)
-- Claimant/policy aggregations
-- Document presence indicators
-- Behavioral patterns
-
-```python
-from src.ml_engine import MLFraudScorer
-
-scorer = MLFraudScorer(
-    model_path="models/claimlens_catboost_hinglish.cbm",
-    metadata_path="models/claimlens_model_metadata.json"
-)
-result = scorer.score_claim(features, return_details=True)
+**Expected Output:**
+```
+✓ Environment Variables: OK
+✓ FastAPI Server: OK
+✓ LLM Engine: OK
+✓ ML Engine: OK
+✓ ALL SYSTEMS OPERATIONAL
 ```
 
-### Fraud Graph Analytics
+---
 
-Neo4j-based network analysis to detect:
-- Fraud rings (shared documents across claims)
-- Serial fraudsters (multiple claims from same claimant)
-- Document reuse patterns
-- Policy abuse
-
-## Architecture
+## 🏗️ **Architecture**
 
 ```
-Claim Input
-    |
-    v
-CV Engine (Document + Damage Detection)
-    |
-    v
-ML Engine (Fraud Scoring)
-    |
-    v
-Fraud Graph (Network Analysis)
-    |
-    v
-Decision Engine (Semantic Aggregation + LLM Explanation)
-    |
-    v
-Verdict (APPROVE / REVIEW / REJECT)
+┌─────────────────────────────────────────────────────────┐
+│                   Streamlit Frontend                     │
+│            (Interactive Claim Analysis UI)               │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│                   FastAPI Backend                        │
+│                  (REST API Gateway)                      │
+└──┬──────────┬──────────┬──────────┬─────────────────────┘
+   │          │          │          │
+   ▼          ▼          ▼          ▼
+┌─────┐  ┌────────┐  ┌──────┐  ┌──────────┐
+│ ML  │  │   CV   │  │Graph │  │   LLM    │
+│Engine│  │ Engine │  │Engine│  │  Engine  │
+└─────┘  └────────┘  └──────┘  └──────────┘
+   │          │          │          │
+   ▼          ▼          ▼          ▼
+CatBoost   YOLO/OCR   Neo4j    Groq API
 ```
 
-## Project Structure
+### **Technology Stack**
 
-```
-ClaimLens_App/
-├── src/
-│   ├── cv_engine/          # Document and damage detection
-│   ├── ml_engine/          # Fraud scoring
-│   ├── fraud_engine/       # Graph analytics
-│   ├── explainability/     # LLM explanations
-│   └── app/                # Core logic
-├── api/                    # FastAPI routes
-├── frontend/               # Streamlit dashboard
-├── tests/                  # Test suite
-├── scripts/                # Data preparation
-└── models/                 # Model files
-```
+| Component | Technology | Purpose |
+|-----------|-----------|----------|
+| **Backend** | FastAPI | RESTful API framework |
+| **Frontend** | Streamlit | Interactive dashboard |
+| **ML Model** | CatBoost | Fraud probability scoring |
+| **CV Models** | YOLO, Tesseract | Document forgery detection |
+| **Graph DB** | Neo4j | Fraud network analysis |
+| **LLM** | Groq Llama-3.3-70B | Natural language explanations |
+| **Orchestration** | LangChain | LLM workflow management |
+| **Monitoring** | Loguru | Structured logging |
 
-## API Reference
+---
 
-### Document Verification
+## 📊 **API Endpoints**
 
-```http
-POST /verify/aadhaar
-{
-  "image": "base64_encoded_image",
-  "dual_check": false
-}
-```
+### **Core Endpoints**
 
-### Damage Detection
+```bash
+# Unified Analysis (All modules in one call)
+POST /api/unified/analyze-complete
 
-```http
-POST /detect/damage
-{
-  "image": "base64_encoded_image"
-}
-```
+# ML Fraud Scoring
+POST /api/ml/score
+POST /api/ml/score/detailed
 
-### Fraud Scoring
+# Document Verification
+POST /api/documents/verify-pan
+POST /api/documents/verify-aadhaar
 
-```http
-POST /score/fraud
-{
-  "claim_data": {...}
-}
+# LLM Explanations
+POST /api/llm/explain
+GET  /api/llm/health
+
+# Graph Analysis
+POST /api/fraud/score
+GET  /api/fraud/rings
+GET  /api/fraud/serial-fraudsters
+
+# Health Checks
+GET  /health/liveness
+GET  /health/readiness
 ```
 
-## Testing
+**Interactive API Docs:** http://localhost:8000/docs
+
+---
+
+## 🎨 **Features Demo**
+
+### **1. Multi-Modal Fraud Analysis**
+Analyze claims using ML, CV, Graph, and LLM engines simultaneously
+
+### **2. Document Verification**
+Upload PAN/Aadhaar cards for forgery detection with real-time OCR
+
+### **3. AI-Generated Explanations**
+Get human-readable explanations in both technical and customer-friendly language
+
+### **4. Fraud Network Detection**
+Visualize fraud rings through shared documents and suspicious connections
+
+### **5. Real-Time Dashboards**
+Monitor fraud trends, risk distributions, and analytics
+
+---
+
+## 📚 **Documentation**
+
+Detailed documentation available in `/docs`:
+
+- [Setup Guide](docs/SETUP.md) - Complete installation instructions
+- [API Documentation](docs/API.md) - Endpoint references and examples
+- [Architecture](docs/ARCHITECTURE.md) - System design and data flow
+- [Deployment](docs/DEPLOYMENT.md) - Production deployment guide
+
+---
+
+## 🧪 **Testing**
 
 ```bash
 # Run all tests
-pytest tests/ -v
+pytest tests/
 
-# Test specific modules
-pytest tests/test_aadhaar_detector.py -v
-pytest tests/test_cv_integration.py -v
+# Run specific test suite
+pytest tests/test_ml_engine.py -v
+
+# Run with coverage
+pytest --cov=src tests/
 ```
 
-## Technology Stack
+---
 
-**Computer Vision:** YOLOv11, ResNet50, EfficientNet, Error Level Analysis  
-**Machine Learning:** CatBoost, Sentence Transformers (Bhasha-Embed)  
-**Graph Database:** Neo4j  
-**Backend:** FastAPI, Pydantic  
-**Frontend:** Streamlit, Plotly  
-**Infrastructure:** Docker, Redis
+## 🔧 **Configuration**
 
-## Current Status
+### **Environment Variables**
 
-**Working:**
-- Aadhaar and PAN forgery detection
-- Vehicle damage detection pipeline
-- CatBoost fraud scoring
-- Neo4j graph database integration
-- API endpoints and Streamlit dashboard
+```bash
+# LLM Configuration
+GROQ_API_KEY=your_groq_api_key
+EXPLANATION_MODEL=llama-3.3-70b-versatile
 
-**In Progress:**
-- EXIF metadata verification
-- Multi-image consistency checks
-- Additional document types
+# Neo4j Configuration
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=claimlens123
 
-## License
+# Feature Flags
+ENABLE_LLM_EXPLANATIONS=true
+ENABLE_SEMANTIC_AGGREGATION=true
+```
 
-MIT License - see [LICENSE](LICENSE) file
+---
 
-## Contact
+## 📈 **Performance**
 
-Pranaya Mathur  
-GitHub: [@pranaya-mathur](https://github.com/pranaya-mathur)
+- **ML Inference**: <100ms per claim
+- **Document Analysis**: <2s per image
+- **LLM Explanations**: <3s per explanation
+- **Graph Queries**: <500ms for network analysis
+- **API Throughput**: 100 requests/minute (rate limited)
+
+---
+
+## 🛣️ **Roadmap**
+
+- [ ] **Agentic Architecture** - LangGraph-based autonomous fraud investigation
+- [ ] **Web Intelligence** - Real-time fraud pattern search via Tavily/Perplexity
+- [ ] **Multi-Language Support** - Regional language claim processing
+- [ ] **Advanced Analytics** - Time-series fraud trend prediction
+- [ ] **Mobile App** - React Native mobile interface
+
+---
+
+## 🤝 **Contributing**
+
+Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit changes (`git commit -m 'Add AmazingFeature'`)
+4. Push to branch (`git push origin feature/AmazingFeature`)
+5. Open Pull Request
+
+---
+
+## 📄 **License**
+
+This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
+
+---
+
+## 👤 **Author**
+
+**Pranay Mathur**
+- GitHub: [@pranaya-mathur](https://github.com/pranaya-mathur)
+- LinkedIn: [Connect on LinkedIn](https://linkedin.com/in/your-profile)
+- Email: pranaya.mathur@yahoo.com
+
+---
+
+## 🙏 **Acknowledgments**
+
+- **Groq** - Ultra-fast LLM inference
+- **LangChain** - LLM orchestration framework  
+- **Neo4j** - Graph database platform
+- **CatBoost** - Gradient boosting library
+
+---
+
+## 📞 **Support**
+
+- 📧 Email: pranaya.mathur@yahoo.com
+- 🐛 Issues: [GitHub Issues](https://github.com/pranaya-mathur/ClaimLens_App/issues)
+- 💬 Discussions: [GitHub Discussions](https://github.com/pranaya-mathur/ClaimLens_App/discussions)
+
+---
+
+<div align="center">
+
+**Built with ❤️ for the Insurance Industry**
+
+⭐ Star this repo if you find it useful!
+
+</div>
