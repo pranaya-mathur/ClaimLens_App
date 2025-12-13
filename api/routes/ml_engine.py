@@ -84,7 +84,7 @@ def get_ml_scorer() -> MLFraudScorer:
     if _scorer is None:
         logger.info("Loading MLFraudScorer...")
         
-        # BUG #5 FIX: Use environment variables with defaults
+        # Use environment variables with defaults
         model_path = os.getenv(
             "ML_MODEL_PATH",
             "models/claimlens_catboost_hinglish.cbm"
@@ -105,7 +105,7 @@ def get_ml_scorer() -> MLFraudScorer:
                 metadata_path=metadata_path,
                 threshold=threshold
             )
-            logger.success("✓ MLFraudScorer loaded successfully")
+            logger.success("✅ MLFraudScorer loaded successfully")
         except FileNotFoundError as e:
             logger.error(f"Model files not found: {e}")
             raise HTTPException(
@@ -125,7 +125,7 @@ def get_feature_engineer() -> FeatureEngineer:
     if _feature_engineer is None:
         logger.info("Loading FeatureEngineer...")
         
-        # BUG #5 FIX: Support custom PCA dimensions and embedding model
+        # Support custom PCA dimensions and embedding model
         pca_dims = int(os.getenv("ML_PCA_DIMS", "100"))
         embedding_model = os.getenv(
             "ML_EMBEDDING_MODEL",
@@ -136,11 +136,16 @@ def get_feature_engineer() -> FeatureEngineer:
         logger.info(f"Embedding model: {embedding_model}")
         
         try:
+            # 🔧 NEW: Get expected features from scorer and pass to engineer
+            scorer = get_ml_scorer()
+            expected_features = scorer.expected_features if scorer else None
+            
             _feature_engineer = FeatureEngineer(
                 pca_dims=pca_dims,
-                model_name=embedding_model
+                model_name=embedding_model,
+                expected_features=expected_features  # Pass expected features
             )
-            logger.success("✓ FeatureEngineer loaded successfully")
+            logger.success("✅ FeatureEngineer loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load feature engineer: {e}")
             raise HTTPException(
@@ -269,7 +274,7 @@ async def score_batch_claims(request: BatchClaimRequest):
     **Limits:**
     - Maximum batch size: 100 claims
     """
-    # BUG #6 FIX: Add batch size limit
+    # Add batch size limit
     MAX_BATCH_SIZE = int(os.getenv("ML_MAX_BATCH_SIZE", "100"))
     
     if len(request.claims) > MAX_BATCH_SIZE:
@@ -489,7 +494,7 @@ async def ml_health_check():
             "status": "healthy",
             "ml_scorer_loaded": scorer.model is not None,
             "feature_engineer_ready": engineer.pca is not None,
-            "model_features": len(scorer.model.feature_names_) if scorer.model else 0,
+            "model_features": len(scorer.expected_features) if scorer.expected_features else 0,
             "threshold": scorer.threshold,
             "embedder_model": engineer.model_name,
             "config": {
