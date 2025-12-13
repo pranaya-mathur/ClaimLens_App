@@ -31,7 +31,8 @@ from .forgery_models import PANForgeryDetectorCNN
 
 PathLike = Union[str, Path]
 
-DEFAULT_MODEL_PATH = Path("models/resnet50_finetuned_after_strong_forgeries.pth")
+# 🔧 FIX: Updated path to forgery_detection subdirectory
+DEFAULT_MODEL_PATH = Path("models/forgery_detection/resnet50_finetuned_after_strong_forgeries.pth")
 
 
 @dataclass
@@ -148,7 +149,7 @@ class PANForgeryDetector:
             raise FileNotFoundError(
                 f"Model file not found: {self.model_path}\n"
                 f"Please place 'resnet50_finetuned_after_strong_forgeries.pth' "
-                f"in the models/ directory."
+                f"in the models/forgery_detection/ directory."
             )
         
         logger.info(f"Loading model from {self.model_path}")
