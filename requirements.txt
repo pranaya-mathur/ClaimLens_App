@@ -8,6 +8,7 @@ python-dotenv
 
 # Database & Graph
 neo4j
+redis  # Redis client for caching
 
 # Data Processing & Analysis
 pandas
