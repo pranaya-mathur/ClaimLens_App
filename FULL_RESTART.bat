@@ -59,6 +59,7 @@ echo All caches cleared! Server starting fresh...
 echo ======================================================================
 echo.
 
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+REM FIXED: Use api.main:app instead of main:app
+uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 pause
