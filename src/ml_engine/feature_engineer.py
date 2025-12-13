@@ -319,8 +319,10 @@ class FeatureEngineer:
         """
         Normalize column names to match trained model expectations.
         
-        Converts snake_case to lowercase without underscores.
-        Example: 'days_since_policy_start' -> 'dayssincepolicystart'
+        CRITICAL FIX: Handles categorical dummy variables correctly.
+        - Numeric features: 'days_since_policy_start' -> 'dayssincepolicystart'
+        - Categorical dummies: 'product_health' -> 'product_health' (NO CHANGE)
+        - Embedding columns: 'emb_0' -> 'emb0'
         
         Args:
             df: DataFrame with feature columns
@@ -333,18 +335,30 @@ class FeatureEngineer:
         # Save ID columns if they exist
         id_cols = [c for c in ['claim_id', 'claimant_id', 'policy_id'] if c in df.columns]
         
+        # Categorical prefixes from pd.get_dummies()
+        categorical_prefixes = ('product_', 'city_', 'subtype_')
+        
         # Create mapping for normalization
         rename_map = {}
         for col in df.columns:
-            if col not in id_cols:  # Don't rename ID columns
-                # Remove underscores and convert to lowercase
-                normalized = col.replace('_', '').lower()
-                if col != normalized:
-                    rename_map[col] = normalized
+            if col in id_cols:
+                # Don't rename ID columns
+                continue
+            
+            if col.startswith(categorical_prefixes):
+                # DON'T normalize categorical dummy columns (product_health, city_Delhi, etc.)
+                # They should stay as "prefix_value" format
+                continue
+            
+            # Normalize all other columns (numeric + embeddings)
+            # Remove underscores and convert to lowercase
+            normalized = col.replace('_', '').lower()
+            if col != normalized:
+                rename_map[col] = normalized
         
         if rename_map:
             df = df.rename(columns=rename_map)
-            logger.debug(f"Renamed {len(rename_map)} columns to model format")
+            logger.debug(f"Renamed {len(rename_map)} columns to model format (preserved categorical dummies)")
         
         return df
 
@@ -407,7 +421,7 @@ class FeatureEngineer:
             else:
                 logger.info("ID columns excluded from feature matrix")
             
-            # Normalize column names to match model
+            # Normalize column names to match model (FIXED: preserves categorical dummies)
             feature_df = self._normalize_column_names(feature_df)
             
             logger.success(
