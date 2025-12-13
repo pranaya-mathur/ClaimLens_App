@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from api.routes import fraud, health, analytics, ingest, cv_detection, ml_engine, document_verification, unified_fraud, llm_engine
+from api.routes import fraud, health, analytics, ingest, cv_detection, ml_engine, document_verification, unified_fraud, llm_engine, cache
 from api.middleware.rate_limiter import RateLimitMiddleware
 
 
@@ -28,6 +28,7 @@ app.add_middleware(RateLimitMiddleware)
 
 # Include routers
 app.include_router(health.router, prefix="/health", tags=["Health"])
+app.include_router(cache.router, prefix="/api/cache", tags=["Cache"])  # ⚡ NEW!
 app.include_router(unified_fraud.router, prefix="/api/unified", tags=["Unified Fraud Analysis"])
 app.include_router(fraud.router, prefix="/api/fraud", tags=["Fraud Detection"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
@@ -35,19 +36,20 @@ app.include_router(ingest.router, prefix="/api/ingest", tags=["Claim Ingestion"]
 app.include_router(cv_detection.router, prefix="/api/cv", tags=["Computer Vision"])
 app.include_router(ml_engine.router, prefix="/api/ml", tags=["ML Engine"])
 app.include_router(document_verification.router, prefix="/api/documents", tags=["Document Verification"])
-app.include_router(llm_engine.router, prefix="/api/llm", tags=["LLM Engine"])  # ✅ NEW!
+app.include_router(llm_engine.router, prefix="/api/llm", tags=["LLM Engine"])
 
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("🚀 Starting ClaimLens API v2.0...")
-    logger.info("  - 🎯 Unified Analysis: /api/unified ✅ NEW!")
+    logger.info("  - 🎯 Unified Analysis: /api/unified")
     logger.info("  - Fraud Detection: /api/fraud")
     logger.info("  - Claim Ingestion: /api/ingest")
     logger.info("  - Computer Vision: /api/cv")
     logger.info("  - ML Engine: /api/ml")
     logger.info("  - Document Verification: /api/documents")
-    logger.info("  - LLM Engine: /api/llm ✅ NEW!")  # Updated log
+    logger.info("  - LLM Engine: /api/llm")
+    logger.info("  - ⚡ Cache Layer: /api/cache (Redis)")  # NEW!
     logger.info("  - Analytics: /api/analytics")
     logger.info("  - Rate Limiting: ENABLED (100 req/min)")
     logger.success("✓ API ready")
@@ -72,7 +74,17 @@ def root():
                     "/api/unified/analyze-complete",
                     "/api/unified/health"
                 ],
-                "description": "Complete fraud analysis with ML + CV + Graph + LLM",
+                "description": "Complete fraud analysis with ML + CV + Graph + LLM"
+            },
+            "cache": {
+                "base": "/api/cache",
+                "endpoints": [
+                    "/api/cache/health",
+                    "/api/cache/stats",
+                    "/api/cache/test",
+                    "/api/cache/flush"
+                ],
+                "description": "Redis cache management and monitoring",
                 "status": "NEW"
             },
             "llm_engine": {
@@ -82,8 +94,7 @@ def root():
                     "/api/llm/health",
                     "/api/llm/config"
                 ],
-                "description": "AI-powered natural language explanations using Groq LLM",
-                "status": "NEW"
+                "description": "AI-powered natural language explanations using Groq LLM"
             },
             "computer_vision": {
                 "base": "/api/cv",
@@ -118,6 +129,7 @@ def root():
         },
         "features": {
             "unified_analysis": "All modules (ML + CV + Graph + LLM) in one endpoint",
+            "redis_caching": "High-performance caching layer for ML predictions and documents",
             "llm_explanations": "Natural language explanations powered by Groq Llama-3.3-70B",
             "smart_fallbacks": "Handles missing data gracefully",
             "multi_product": "Motor/Health/Life/Property",
