@@ -1,5 +1,5 @@
 """
-Explanation Generator using Groq LLM
+Explanation Generator using LangChain + Groq LLM (Llama-3.3-70B)
 
 Generates human-friendly explanations for fraud detection verdicts.
 Supports both technical (adjuster) and friendly (customer) audiences.
@@ -9,7 +9,14 @@ Includes streaming mode for real-time explanation display.
 import os
 from typing import Dict, Any, Optional, Generator
 from loguru import logger
-from groq import Groq
+
+try:
+    from langchain_groq import ChatGroq
+    from langchain_core.messages import SystemMessage, HumanMessage
+    LANGCHAIN_AVAILABLE = True
+except ImportError:
+    logger.warning("langchain-groq not installed. Install with: pip install langchain-groq")
+    LANGCHAIN_AVAILABLE = False
 
 
 class ExplanationGenerator:
@@ -43,24 +50,32 @@ class ExplanationGenerator:
             max_tokens: Max tokens for explanation
         """
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
+        self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.llm = None
+        
+        if not LANGCHAIN_AVAILABLE:
+            logger.error("LangChain not available. Explanations will use template logic.")
+            return
         
         if not self.api_key:
             logger.warning(
                 "GROQ_API_KEY not found. Explanations will use templates. "
                 "Get your free API key from https://console.groq.com/"
             )
-            self.client = None
         else:
             try:
-                self.client = Groq(api_key=self.api_key)
-                logger.success(f"Explanation generator initialized with {model}")
+                self.llm = ChatGroq(
+                    api_key=self.api_key,
+                    model=self.model,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens
+                )
+                logger.success(f"LangChain ChatGroq initialized with model: {model}")
             except Exception as e:
-                logger.error(f"Failed to initialize Groq client: {e}")
-                self.client = None
-        
-        self.model = model
-        self.temperature = temperature
-        self.max_tokens = max_tokens
+                logger.error(f"Failed to initialize ChatGroq: {e}")
+                self.llm = None
     
     def _build_explanation_prompt(
         self,
@@ -279,7 +294,7 @@ Component Analysis:
         logger.info(f"Generating {audience} explanation for {claim_data.get('claim_id')}")
         
         # Fallback if LLM unavailable
-        if not self.client:
+        if not self.llm:
             return self._generate_template_explanation(
                 verdict_data, claim_data, component_results, audience
             )
@@ -290,30 +305,26 @@ Component Analysis:
                 verdict_data, claim_data, component_results, audience
             )
             
-            # Call Groq API
+            # Call LangChain ChatGroq
             logger.info(f"Generating explanation with {self.model}...")
             
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": f"You are a helpful insurance claims expert explaining decisions to {audience}."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens
-            )
+            messages = [
+                SystemMessage(content=f"You are a helpful insurance claims expert explaining decisions to {audience}."),
+                HumanMessage(content=prompt)
+            ]
             
-            explanation = response.choices[0].message.content.strip()
+            response = self.llm.invoke(messages)
+            explanation = response.content.strip()
+            
+            # Get token usage if available
+            token_count = 0
+            if hasattr(response, 'response_metadata'):
+                usage = response.response_metadata.get('token_usage', {})
+                token_count = usage.get('total_tokens', 0)
             
             logger.success(
-                f"Explanation generated: {len(explanation)} chars, "
-                f"{response.usage.total_tokens} tokens"
+                f"Explanation generated: {len(explanation)} chars"
+                f"{f', {token_count} tokens' if token_count else ''}"
             )
             
             return explanation
@@ -346,7 +357,7 @@ Component Analysis:
         logger.info(f"Generating streaming {audience} explanation")
         
         # Fallback if LLM unavailable
-        if not self.client:
+        if not self.llm:
             explanation = self._generate_template_explanation(
                 verdict_data, claim_data, component_results, audience
             )
@@ -361,29 +372,22 @@ Component Analysis:
                 verdict_data, claim_data, component_results, audience
             )
             
-            # Call Groq API with streaming
+            # Call LangChain ChatGroq with streaming
             logger.info(f"Streaming explanation with {self.model}...")
             
-            stream = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": f"You are a helpful insurance claims expert explaining decisions to {audience}."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                stream=True
-            )
+            messages = [
+                SystemMessage(content=f"You are a helpful insurance claims expert explaining decisions to {audience}."),
+                HumanMessage(content=prompt)
+            ]
+            
+            # Use stream method if available
+            stream = self.llm.stream(messages)
             
             for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+                if hasattr(chunk, 'content'):
+                    yield chunk.content
+                else:
+                    yield str(chunk)
             
             logger.success("Streaming explanation complete")
             
@@ -401,6 +405,6 @@ Component Analysis:
         Check if LLM service is available.
         
         Returns:
-            True if Groq client is initialized
+            True if ChatGroq client is initialized
         """
-        return self.client is not None
+        return self.llm is not None
