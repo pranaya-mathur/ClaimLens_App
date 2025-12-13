@@ -137,7 +137,7 @@ class PANForgeryDetector:
         ])
         
         logger.success(
-            f"✓ PAN detector ready | "
+            f"PAN detector ready | "
             f"Threshold: {self.threshold} | "
             f"AUC: {self.MODEL_CONFIG['performance']['auc']:.4f}"
         )
@@ -167,7 +167,7 @@ class PANForgeryDetector:
             self.model.to(self.device)
             self.model.eval()
             
-            logger.success("✓ Model loaded successfully")
+            logger.success("Model loaded successfully")
             
         except Exception as e:
             logger.error(f"Failed to load PAN model: {e}")

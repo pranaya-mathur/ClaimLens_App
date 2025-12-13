@@ -135,7 +135,7 @@ class AadhaarForgeryDetector:
         ])
         
         logger.success(
-            f"✓ Aadhaar detector ready | "
+            f"Aadhaar detector ready | "
             f"Threshold: {self.threshold} | "
             f"Accuracy: {self.MODEL_CONFIG['performance']['validation_accuracy']:.2%}"
         )
@@ -166,7 +166,7 @@ class AadhaarForgeryDetector:
                 if 'model_state_dict' in checkpoint:
                     self.model.load_state_dict(checkpoint['model_state_dict'])
                     logger.info(
-                        f"✓ Loaded checkpoint with AUC: "
+                        f"Loaded checkpoint with AUC: "
                         f"{checkpoint.get('best_auc', 'N/A')}"
                     )
                 elif 'state_dict' in checkpoint:
@@ -181,7 +181,7 @@ class AadhaarForgeryDetector:
             self.model.to(self.device)
             self.model.eval()
             
-            logger.success("✓ Model loaded successfully")
+            logger.success("Model loaded successfully")
             
         except Exception as e:
             logger.error(f"Failed to load Aadhaar model: {e}")
