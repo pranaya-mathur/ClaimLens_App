@@ -14,6 +14,7 @@ ClaimLens delivers production-ready fraud detection for insurance claims through
 
 - **Document Verification**: Deep learning-based forgery detection for Aadhaar and PAN cards with high accuracy
 - **Vehicle Damage Assessment**: Multi-model pipeline for parts segmentation, damage detection, and severity classification
+- **ML Fraud Scoring**: CatBoost-based fraud detection trained on 50K Hinglish claims
 - **Fraud Network Analysis**: Graph-based detection of fraud rings, serial fraudsters, and document reuse patterns
 - **Explainable AI**: LLM-powered explanations tailored for adjusters and customers
 - **Real-time Processing**: End-to-end claim adjudication with semantic aggregation
@@ -21,36 +22,36 @@ ClaimLens delivers production-ready fraud detection for insurance claims through
 ## Architecture
 
 ```
-┌─────────────────┐
+┌────────────────┐
 │  Claim Upload   │
 └────────┬────────┘
          │
-    ┌────▼─────────────────────────┐
+    ┌────▼──────────────────────────┐
     │    Computer Vision Engine    │
     │  • Document Verification     │
     │  • Damage Detection          │
     └────────┬─────────────────────┘
              │
-    ┌────────▼─────────────────────┐
+    ┌────────▼──────────────────────┐
     │   Machine Learning Engine    │
-    │  • XGBoost Risk Scoring      │
+    │  • CatBoost Risk Scoring     │
     │  • NLP Narrative Analysis    │
     └────────┬─────────────────────┘
              │
-    ┌────────▼─────────────────────┐
+    ┌────────▼──────────────────────┐
     │    Fraud Graph Analytics     │
     │  • Neo4j Network Analysis    │
     │  • Pattern Detection         │
     └────────┬─────────────────────┘
              │
-    ┌────────▼─────────────────────┐
+    ┌────────▼──────────────────────┐
     │    Decision Engine + LLM     │
     │  • Semantic Aggregation      │
     │  • Rule-based Logic          │
     │  • Explainable Decisions     │
     └────────┬─────────────────────┘
              │
-    ┌────────▼─────────────────────┐
+    ┌────────▼──────────────────────┐
     │  APPROVE / REVIEW / REJECT   │
     └──────────────────────────────┘
 ```
@@ -94,6 +95,10 @@ Download required model files and place them in the `models/` directory:
 **Document Verification Models:**
 - `aadhaar_balanced_model.pth` - Aadhaar forgery detection
 - `resnet50_finetuned_after_strong_forgeries.pth` - PAN forgery detection
+
+**ML Fraud Scoring Models:**
+- `claimlens_catboost_hinglish.cbm` - CatBoost fraud classifier
+- `claimlens_model_metadata.json` - Model metadata
 
 **Legacy Models:**
 - `forgery_detector_latest_run.pth` - Generic forgery detection
@@ -181,7 +186,43 @@ Multi-stage computer vision pipeline for comprehensive damage assessment.
 - Sub-second inference per image
 - Detailed damage localization with bounding boxes
 
-### 3. Generic Forgery Detection
+### 3. ML Fraud Scoring Engine
+
+CatBoost-based fraud detection trained on Hinglish insurance claims.
+
+**Architecture:**
+- **Model**: CatBoostClassifier with 145 features
+- **Training Data**: 50,000 Hinglish claims
+- **Features**: Bhasha-Embed narrative embeddings (100-dim PCA), behavioral patterns, document indicators
+- **Performance**: High AUC with balanced precision-recall tradeoff
+
+```python
+from src.ml_engine import MLFraudScorer, FeatureEngineer
+
+# Feature engineering
+fe = FeatureEngineer(pca_dims=100)
+features = fe.engineer_features(df, narrative_col="narrative")
+
+# Load scorer
+scorer = MLFraudScorer(
+    model_path="models/claimlens_catboost_hinglish.cbm",
+    metadata_path="models/claimlens_model_metadata.json"
+)
+
+# Score claim
+result = scorer.score_claim(features, return_details=True)
+print(f"Fraud probability: {result['fraud_probability']:.2%}")
+print(f"Risk level: {result['risk_level']}")
+```
+
+**Feature Categories:**
+- Time-aware claimant/policy aggregations
+- Narrative embeddings with Hinglish support
+- Document presence indicators
+- Categorical encodings (product type, city, subtype)
+- Behavioral red flags
+
+### 4. Generic Forgery Detection
 
 Hybrid deep learning and forensics approach for image manipulation detection.
 
@@ -203,7 +244,7 @@ print(f"Forgery Detected: {result.is_forged}")
 print(f"Confidence: {result.forgery_prob:.2%}")
 ```
 
-### 4. Fraud Graph Analytics
+### 5. Fraud Graph Analytics
 
 Neo4j-powered network analysis for detecting organized fraud patterns.
 
@@ -213,13 +254,14 @@ Neo4j-powered network analysis for detecting organized fraud patterns.
 - Document reuse pattern recognition
 - Policy abuse detection
 - Community detection algorithms
+- Live ingestion for real-time updates
 
 **Performance:**
 - Sub-100ms query execution
 - Real-time graph updates
 - Scalable to millions of nodes
 
-### 5. Semantic Decision Engine
+### 6. Semantic Decision Engine
 
 Advanced decision-making with LLM-powered explainability.
 
@@ -229,7 +271,7 @@ Advanced decision-making with LLM-powered explainability.
 - **LLM Explanations**: Dual-audience prompts (technical for adjusters, simplified for customers)
 - **Audit Trail**: Complete decision provenance tracking
 
-### 6. Modern Streamlit Dashboard
+### 7. Modern Streamlit Dashboard
 
 State-of-the-art interface with live streaming and interactive visualizations.
 
@@ -245,7 +287,7 @@ State-of-the-art interface with live streaming and interactive visualizations.
 | Layer | Technologies |
 |-------|-------------|
 | **Computer Vision** | YOLOv11, ResNet50, EfficientNet, Error Level Analysis |
-| **Machine Learning** | XGBoost, CatBoost, Sentence Transformers |
+| **Machine Learning** | CatBoost, Sentence Transformers (Bhasha-Embed) |
 | **Graph Database** | Neo4j, NetworkX |
 | **Backend API** | FastAPI, Pydantic, Uvicorn |
 | **LLM Integration** | LangChain, OpenAI, Groq |
@@ -265,8 +307,13 @@ ClaimLens_App/
 │   │   ├── document_verifier.py
 │   │   ├── forgery_detector.py
 │   │   └── forgery_utils.py
+│   ├── ml_engine/              # ML fraud scoring
+│   │   ├── feature_engineer.py
+│   │   └── ml_scorer.py
 │   ├── fraud_engine/           # Graph analytics
-│   ├── ml_engine/              # ML scoring models
+│   │   ├── fraud_detector.py
+│   │   ├── graph_loader.py
+│   │   └── live_ingest.py
 │   ├── explainability/         # LLM explainer
 │   └── app/                    # Core application logic
 ├── api/                        # FastAPI routes
@@ -374,28 +421,31 @@ pytest tests/ -v --cov=src
 
 ## Roadmap
 
-### Recently Completed
-- ✅ Document verification system (Aadhaar & PAN)
-- ✅ Vehicle damage detection pipeline
-- ✅ Fraud graph database integration
-- ✅ LLM-powered explainability
+### Completed Features
+- ✅ Document verification system (Aadhaar & PAN with dual-check)
+- ✅ Vehicle damage detection pipeline (YOLO + EfficientNet)
+- ✅ CatBoost fraud scoring engine with Hinglish embeddings
+- ✅ Fraud graph database with Neo4j integration
+- ✅ Live graph ingestion for real-time updates
+- ✅ LLM-powered explainability with Groq
 - ✅ Semantic aggregation engine
-- ✅ Modern Streamlit dashboard
+- ✅ Modern Streamlit dashboard with live streaming
 - ✅ Docker containerization
+- ✅ Comprehensive test suite
 
-### In Progress
-- 🚧 XGBoost fraud scoring engine
-- 🚧 Duplicate image detection
+### In Development
 - 🚧 EXIF metadata verification
 - 🚧 Multi-image consistency checks
+- 🚧 Advanced duplicate detection algorithms
 
-### Planned
-- 📋 Passport and driver's license verification
+### Planned Enhancements
+- 📋 Additional document types (Passport, Driver's License)
 - 📋 GAN-generated image detection
-- 📋 Real-time monitoring dashboard
+- 📋 Enhanced monitoring dashboard with alerts
 - 📋 Model serving optimization (ONNX, TensorRT)
 - 📋 A/B testing framework
-- 📋 Kubernetes deployment configs
+- 📋 Kubernetes deployment configurations
+- 📋 API rate limiting and authentication
 
 ## Contributing
 
