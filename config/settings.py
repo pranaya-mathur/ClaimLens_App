@@ -4,6 +4,7 @@ Configuration settings for ClaimLens
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 from typing import Optional
+from loguru import logger
 
 
 class Settings(BaseSettings):
@@ -56,11 +57,25 @@ class Settings(BaseSettings):
     BATCH_SIZE: int = 32
     CV_DEVICE: str = "cpu"  # Default to CPU, set to 'cuda' in .env if GPU available
     
-    # LLM Configuration (Optional)
+    # LLM Configuration (NEW!)
+    GROQ_API_KEY: Optional[str] = None  # Get from https://console.groq.com/
     OPENAI_API_KEY: Optional[str] = None
-    LLM_MODEL: Optional[str] = None
     
-    # Logging (Optional)
+    # LLM Feature Flags (NEW!)
+    ENABLE_SEMANTIC_AGGREGATION: bool = True
+    ENABLE_LLM_EXPLANATIONS: bool = True
+    
+    # LLM Model Configuration (NEW!)
+    LLM_MODEL: str = "llama-3.3-70b-versatile"
+    LLM_TEMPERATURE: float = 0.1
+    LLM_MAX_TOKENS: int = 1024
+    
+    # Explanation Generator Configuration (NEW!)
+    EXPLANATION_MODEL: str = "llama-3.3-70b-versatile"
+    EXPLANATION_TEMPERATURE: float = 0.3
+    EXPLANATION_MAX_TOKENS: int = 512
+    
+    # Logging
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str = "logs/claimlens.log"
     
@@ -68,8 +83,41 @@ class Settings(BaseSettings):
         env_file = ".env"
         case_sensitive = True
         extra = "ignore"  # Ignore extra fields from .env
+    
+    def get_llm_enabled(self) -> bool:
+        """
+        Check if LLM semantic aggregation is enabled and configured.
+        
+        Returns:
+            True if both flag and API key are set
+        """
+        return self.ENABLE_SEMANTIC_AGGREGATION and bool(self.GROQ_API_KEY)
+    
+    def get_llm_explanation_enabled(self) -> bool:
+        """
+        Check if LLM explanations are enabled and configured.
+        
+        Returns:
+            True if both flag and API key are set
+        """
+        return self.ENABLE_LLM_EXPLANATIONS and bool(self.GROQ_API_KEY)
 
 
 @lru_cache()
 def get_settings() -> Settings:
-    return Settings()
+    """Get cached settings instance"""
+    settings = Settings()
+    
+    # Validate LLM configuration on first load
+    if settings.ENABLE_SEMANTIC_AGGREGATION or settings.ENABLE_LLM_EXPLANATIONS:
+        if settings.GROQ_API_KEY:
+            logger.success(f"✅ LLM configured: {settings.LLM_MODEL}")
+            logger.success(f"✅ Semantic Aggregation: {settings.ENABLE_SEMANTIC_AGGREGATION}")
+            logger.success(f"✅ LLM Explanations: {settings.ENABLE_LLM_EXPLANATIONS}")
+        else:
+            logger.warning(
+                "⚠️ LLM features enabled but GROQ_API_KEY not set. "
+                "Will use fallback logic. Get key from https://console.groq.com/"
+            )
+    
+    return settings
