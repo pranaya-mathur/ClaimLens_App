@@ -2,19 +2,17 @@
 Handles PAN, Aadhaar, and generic document verification
 """
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Form
-from fastapi.responses import JSONResponse
 from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
 import os
 import tempfile
 from pathlib import Path
 from loguru import logger
-import re
 
 from src.cv_engine.pan_detector import PANForgeryDetector
 from src.cv_engine.aadhaar_detector import AadhaarForgeryDetector
 from src.cv_engine.document_verifier import DocumentVerifier
-from src.cv_engine.forgery_detector import ForgeryDetector  # 🔥 ADDED FOR GENERIC DOCS
+from src.cv_engine.forgery_detector import ForgeryDetector  # 🔥 GENERIC FORGERY DETECTOR
 from config.settings import get_settings
 
 router = APIRouter()
@@ -33,7 +31,7 @@ def get_pan_detector() -> PANForgeryDetector:
     if _pan_detector is None:
         logger.info("Initializing PANForgeryDetector...")
         _pan_detector = PANForgeryDetector()
-        logger.success("PANForgeryDetector initialized")
+        logger.success("✅ PANForgeryDetector initialized")
     return _pan_detector
 
 
@@ -43,7 +41,7 @@ def get_aadhaar_detector() -> AadhaarForgeryDetector:
     if _aadhaar_detector is None:
         logger.info("Initializing AadhaarForgeryDetector...")
         _aadhaar_detector = AadhaarForgeryDetector()
-        logger.success("AadhaarForgeryDetector initialized")
+        logger.success("✅ AadhaarForgeryDetector initialized")
     return _aadhaar_detector
 
 
@@ -53,7 +51,7 @@ def get_doc_verifier() -> DocumentVerifier:
     if _doc_verifier is None:
         logger.info("Initializing DocumentVerifier...")
         _doc_verifier = DocumentVerifier()
-        logger.success("DocumentVerifier initialized")
+        logger.success("✅ DocumentVerifier initialized")
     return _doc_verifier
 
 
@@ -61,15 +59,39 @@ def get_forgery_detector() -> ForgeryDetector:
     """Get or initialize generic forgery detector."""
     global _forgery_detector
     if _forgery_detector is None:
-        logger.info("Initializing ForgeryDetector (Generic)...")
-        device = settings.CV_DEVICE if hasattr(settings, 'CV_DEVICE') else 'cpu'
+        logger.info("Initializing ForgeryDetector (Generic ResNet50 + ELA)...")
+        device = 'cpu'  # Default to CPU for compatibility
         _forgery_detector = ForgeryDetector(device=device)
-        logger.success("ForgeryDetector initialized (ResNet50 + ELA + Noise Analysis)")
+        logger.success("✅ ForgeryDetector initialized (ResNet50 + ELA + Noise Analysis)")
     return _forgery_detector
 
 
+# Response Models
+class PANVerificationResponse(BaseModel):
+    status: str
+    document_type: str = "PAN"
+    is_valid: bool
+    confidence: float = Field(ge=0.0, le=1.0)
+    extracted_data: dict
+    validation_checks: dict
+    risk_score: float = Field(ge=0.0, le=1.0)
+    red_flags: List[str]
+    recommendation: str
+
+
+class AadhaarVerificationResponse(BaseModel):
+    status: str
+    document_type: str = "AADHAAR"
+    is_valid: bool
+    confidence: float = Field(ge=0.0, le=1.0)
+    extracted_data: dict
+    validation_checks: dict
+    risk_score: float = Field(ge=0.0, le=1.0)
+    red_flags: List[str]
+    recommendation: str
+
+
 class GenericDocVerificationResponse(BaseModel):
-    """Response model for generic document verification."""
     status: str
     document_type: str
     is_valid: bool
@@ -81,6 +103,203 @@ class GenericDocVerificationResponse(BaseModel):
     recommendation: str
 
 
+# ============================================================================
+# PAN VERIFICATION
+# ============================================================================
+
+@router.post(
+    "/verify-pan",
+    response_model=PANVerificationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Verify PAN card authenticity"
+)
+async def verify_pan(
+    file: UploadFile = File(..., description="PAN card image"),
+    expected_pan: Optional[str] = Form(None),
+    expected_name: Optional[str] = Form(None)
+):
+    """Verify PAN card using specialized PANForgeryDetector."""
+    logger.info(f"📋 PAN verification: {file.filename}")
+    
+    try:
+        contents = await file.read()
+        file_size_mb = len(contents) / (1024 * 1024)
+        
+        if file_size_mb > settings.MAX_IMAGE_SIZE_MB:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File size exceeds {settings.MAX_IMAGE_SIZE_MB}MB"
+            )
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp_file:
+            tmp_file.write(contents)
+            tmp_path = tmp_file.name
+        
+        try:
+            detector = get_pan_detector()
+            result = detector.analyze(tmp_path)
+            
+            extracted_data = {"pan_number": "", "name": "", "fathers_name": "", "date_of_birth": ""}
+            
+            validation_checks = {
+                "format_valid": True,
+                "quality_score": 1.0 - result.forgery_probability,
+                "forgery_detected": result.verdict == "FORGED"
+            }
+            
+            red_flags = []
+            risk_score = 0.0
+            
+            if validation_checks["forgery_detected"]:
+                red_flags.append(f"Forgery detected ({result.confidence:.1%})")
+                risk_score += 0.8
+            elif result.forgery_probability > 0.5:
+                red_flags.append(f"High forgery probability ({result.forgery_probability:.1%})")
+                risk_score += 0.6
+            elif result.forgery_probability > 0.3:
+                red_flags.append(f"Moderate forgery signals ({result.forgery_probability:.1%})")
+                risk_score += 0.3
+            
+            risk_score = min(risk_score, 1.0)
+            is_valid = not validation_checks["forgery_detected"] and result.forgery_probability < 0.3
+            
+            if risk_score >= 0.7:
+                recommendation = "REJECT - High fraud risk"
+            elif risk_score >= 0.4:
+                recommendation = "REVIEW - Manual verification required"
+            elif is_valid:
+                recommendation = "APPROVE - PAN verified"
+            else:
+                recommendation = "REVIEW - Issues detected"
+            
+            logger.success(f"✅ PAN verified: valid={is_valid}, confidence={result.confidence:.2f}")
+            
+            return PANVerificationResponse(
+                status="success",
+                is_valid=is_valid,
+                confidence=round(result.confidence, 3),
+                extracted_data=extracted_data,
+                validation_checks=validation_checks,
+                risk_score=round(risk_score, 3),
+                red_flags=red_flags,
+                recommendation=recommendation
+            )
+            
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ PAN verification failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"PAN verification error: {str(e)}"
+        )
+
+
+# ============================================================================
+# AADHAAR VERIFICATION
+# ============================================================================
+
+@router.post(
+    "/verify-aadhaar",
+    response_model=AadhaarVerificationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Verify Aadhaar card authenticity"
+)
+async def verify_aadhaar(
+    file: UploadFile = File(..., description="Aadhaar card image"),
+    expected_aadhaar: Optional[str] = Form(None),
+    expected_name: Optional[str] = Form(None),
+    mask_number: bool = Form(True)
+):
+    """Verify Aadhaar card using specialized AadhaarForgeryDetector."""
+    logger.info(f"🪪 Aadhaar verification: {file.filename}")
+    
+    try:
+        contents = await file.read()
+        file_size_mb = len(contents) / (1024 * 1024)
+        
+        if file_size_mb > settings.MAX_IMAGE_SIZE_MB:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File size exceeds limit"
+            )
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp_file:
+            tmp_file.write(contents)
+            tmp_path = tmp_file.name
+        
+        try:
+            detector = get_aadhaar_detector()
+            result = detector.analyze(tmp_path)
+            
+            extracted_data = {"aadhaar_number": "", "name": "", "date_of_birth": "", "gender": "", "address": ""}
+            
+            validation_checks = {
+                "format_valid": True,
+                "quality_score": result.authentic_probability,
+                "forgery_detected": result.verdict == "FORGED"
+            }
+            
+            red_flags = []
+            risk_score = 0.0
+            
+            if validation_checks["forgery_detected"]:
+                red_flags.append(f"Forgery detected ({result.confidence:.1%})")
+                risk_score += 0.8
+            elif result.forged_probability > 0.5:
+                red_flags.append(f"High forgery probability ({result.forged_probability:.1%})")
+                risk_score += 0.6
+            elif result.forged_probability > 0.3:
+                red_flags.append(f"Moderate forgery signals ({result.forged_probability:.1%})")
+                risk_score += 0.3
+            
+            risk_score = min(risk_score, 1.0)
+            is_valid = not validation_checks["forgery_detected"] and result.forged_probability < 0.3
+            
+            if risk_score >= 0.7:
+                recommendation = "REJECT - High fraud risk"
+            elif risk_score >= 0.4:
+                recommendation = "REVIEW - Manual verification required"
+            elif is_valid:
+                recommendation = "APPROVE - Aadhaar verified"
+            else:
+                recommendation = "REVIEW - Issues detected"
+            
+            logger.success(f"✅ Aadhaar verified: valid={is_valid}, confidence={result.confidence:.2f}")
+            
+            return AadhaarVerificationResponse(
+                status="success",
+                is_valid=is_valid,
+                confidence=round(result.confidence, 3),
+                extracted_data=extracted_data,
+                validation_checks=validation_checks,
+                risk_score=round(risk_score, 3),
+                red_flags=red_flags,
+                recommendation=recommendation
+            )
+            
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Aadhaar verification failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Aadhaar verification error: {str(e)}"
+        )
+
+
+# ============================================================================
+# GENERIC DOCUMENT VERIFICATION (🔥 THE CRITICAL ONE!)
+# ============================================================================
+
 @router.post(
     "/verify-document",
     response_model=GenericDocVerificationResponse,
@@ -90,36 +309,22 @@ class GenericDocVerificationResponse(BaseModel):
     Generic document verification using ResNet50 + ELA forgery detection.
     
     **Supported Documents:**
-    - Driving License
-    - Passport  
-    - Voter ID
-    - Bank statements
-    - Hospital bills
-    - Death certificate
-    - Any other official document
+    - Driving License, Passport, Voter ID
+    - Bank statements, Hospital bills
+    - Death certificate, Any official document
     
-    **Verification Process:**
-    1. ✅ ResNet50 CNN forgery probability
-    2. ✅ ELA (Error Level Analysis) tampering detection
-    3. ✅ Noise variation analysis
-    4. ✅ Risk scoring and recommendation
+    **Technology:**
+    - ResNet50 CNN for forgery probability
+    - ELA (Error Level Analysis) for tampering
+    - Noise variation analysis
     """
 )
 async def verify_document(
     file: UploadFile = File(..., description="Document image"),
-    document_type: Literal["license", "passport", "voter_id", "bank_statement", "hospital_bill", "death_certificate", "other"] = Form(..., description="Type of document")
+    document_type: Literal["license", "passport", "voter_id", "bank_statement", "hospital_bill", "death_certificate", "other"] = Form(...)
 ):
-    """
-    Verify generic document using ForgeryDetector.
-    
-    Args:
-        file: Document image
-        document_type: Type of document being verified
-        
-    Returns:
-        Document verification result with forgery analysis
-    """
-    logger.info(f"📝 Generic document verification: {document_type} - {file.filename}")
+    """Verify generic document using ForgeryDetector (ResNet50 + ELA)."""
+    logger.info(f"📄 Generic document verification: {document_type} - {file.filename}")
     
     try:
         contents = await file.read()
@@ -128,10 +333,9 @@ async def verify_document(
         if file_size_mb > settings.MAX_IMAGE_SIZE_MB:
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=f"File size exceeds limit ({settings.MAX_IMAGE_SIZE_MB}MB)"
+                detail=f"File size exceeds {settings.MAX_IMAGE_SIZE_MB}MB"
             )
         
-        # Save to temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp_file:
             tmp_file.write(contents)
             tmp_path = tmp_file.name
@@ -140,11 +344,9 @@ async def verify_document(
             # 🔥 USE FORGERY DETECTOR FOR GENERIC DOCUMENTS
             detector = get_forgery_detector()
             
-            # Run generic forgery analysis
             logger.info(f"🔍 Analyzing {document_type} with ForgeryDetector (ResNet50 + ELA)...")
             result = detector.analyze_image(tmp_path)
             
-            # Extract data (placeholder)
             extracted_data = {
                 "document_type": document_type.upper().replace("_", " "),
                 "file_name": file.filename
@@ -152,8 +354,8 @@ async def verify_document(
             
             # 🔥 DETAILED VALIDATION CHECKS
             validation_checks = {
-                "format_valid": True,  # File loaded successfully
-                "quality_score": round(1.0 - result.forgery_prob, 3),  # Inverse of forgery prob
+                "format_valid": True,
+                "quality_score": round(1.0 - result.forgery_prob, 3),
                 "forgery_detected": result.is_forged,
                 "cnn_forgery_probability": round(result.forgery_prob, 3),
                 "ela_intensity_score": round(result.ela_score, 3),
@@ -161,11 +363,10 @@ async def verify_document(
                 "threshold_used": round(result.threshold, 3)
             }
             
-            # 🔥 CALCULATE RISK SCORE
+            # 🔥 RISK CALCULATION
             red_flags = []
             risk_score = 0.0
             
-            # CNN forgery probability check
             if result.forgery_prob >= 0.7:
                 red_flags.append(f"🚨 Very high forgery probability ({result.forgery_prob:.1%})")
                 risk_score += 0.7
@@ -176,31 +377,23 @@ async def verify_document(
                 red_flags.append(f"🟡 Moderate forgery signals ({result.forgery_prob:.1%})")
                 risk_score += 0.3
             
-            # ELA anomaly detection
             if result.ela_score > 30.0:
-                red_flags.append(f"🔍 High ELA intensity detected ({result.ela_score:.1f}) - possible tampering")
+                red_flags.append(f"🔍 High ELA intensity ({result.ela_score:.1f}) - possible tampering")
                 risk_score += 0.2
             elif result.ela_score > 20.0:
                 red_flags.append(f"🟡 Moderate ELA signals ({result.ela_score:.1f})")
                 risk_score += 0.1
             
-            # Noise analysis
             if result.noise_variation > 50.0:
-                red_flags.append(f"🔊 High noise variation ({result.noise_variation:.1f}) - quality concerns")
+                red_flags.append(f"🔊 High noise variation ({result.noise_variation:.1f})")
                 risk_score += 0.1
             
-            # Cap risk score
             risk_score = min(risk_score, 1.0)
-            
-            # 🔥 OVERALL VALIDITY
             is_valid = not result.is_forged and result.forgery_prob < 0.4
+            confidence = 1.0 - result.forgery_prob
             
-            # Confidence from model
-            confidence = 1.0 - result.forgery_prob  # Authenticity confidence
-            
-            # 🔥 RECOMMENDATION
             if risk_score >= 0.7:
-                recommendation = "REJECT - High fraud risk detected by AI"
+                recommendation = "REJECT - High fraud risk detected"
             elif risk_score >= 0.5:
                 recommendation = "REVIEW - Manual verification strongly recommended"
             elif risk_score >= 0.3:
@@ -211,9 +404,8 @@ async def verify_document(
                 recommendation = "REVIEW - Verification issues detected"
             
             logger.success(
-                f"✅ {document_type} verification complete: valid={is_valid}, "
-                f"confidence={confidence:.2f}, risk={risk_score:.2f}, "
-                f"forgery_prob={result.forgery_prob:.3f}"
+                f"✅ {document_type} verified: valid={is_valid}, confidence={confidence:.2f}, "
+                f"risk={risk_score:.2f}, forgery_prob={result.forgery_prob:.3f}"
             )
             
             return GenericDocVerificationResponse(
@@ -229,52 +421,50 @@ async def verify_document(
             )
             
         finally:
-            # Cleanup temp file
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
     
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Document verification failed for {document_type}: {str(e)}")
+        logger.error(f"❌ Generic document verification failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Document verification error: {str(e)}"
         )
 
 
-@router.get(
-    "/info",
-    summary="Get document verification capabilities"
-)
+# ============================================================================
+# SERVICE INFO
+# ============================================================================
+
+@router.get("/info", summary="Get verification capabilities")
 async def service_info():
-    """Get information about document verification capabilities."""
+    """Get document verification capabilities."""
     return {
         "service": "Document Verification Suite",
         "version": "2.0.0",
-        "capabilities": {
-            "pan_verification": {
-                "detector": "PANForgeryDetector",
+        "detectors": {
+            "pan_detector": {
+                "class": "PANForgeryDetector",
                 "accuracy": "99.19%",
                 "auc": "0.9996",
-                "technology": "ResNet50 + ELA"
+                "technology": "ResNet50 + ELA",
+                "endpoint": "/api/documents/verify-pan"
             },
-            "aadhaar_verification": {
-                "detector": "AadhaarForgeryDetector",
+            "aadhaar_detector": {
+                "class": "AadhaarForgeryDetector",
                 "accuracy": "99.62%",
                 "auc": "0.9999",
-                "technology": "ResNet50"
+                "technology": "ResNet50",
+                "endpoint": "/api/documents/verify-aadhaar"
             },
-            "generic_verification": {
-                "detector": "ForgeryDetector",
+            "generic_forgery_detector": {
+                "class": "ForgeryDetector",
                 "technology": "ResNet50 + ELA + Noise Analysis",
                 "supported_documents": [
-                    "driving_license",
-                    "passport",
-                    "voter_id",
-                    "bank_statement",
-                    "hospital_bill",
-                    "death_certificate",
+                    "driving_license", "passport", "voter_id",
+                    "bank_statement", "hospital_bill", "death_certificate",
                     "any_official_document"
                 ],
                 "features": [
@@ -282,14 +472,9 @@ async def service_info():
                     "ELA tampering detection",
                     "Noise variation analysis",
                     "Quality assessment"
-                ]
+                ],
+                "endpoint": "/api/documents/verify-document"
             }
-        },
-        "endpoints": {
-            "pan_verification": "/api/documents/verify-pan",
-            "aadhaar_verification": "/api/documents/verify-aadhaar",
-            "generic_verification": "/api/documents/verify-document",
-            "service_info": "/api/documents/info"
         },
         "limits": {
             "max_file_size_mb": settings.MAX_IMAGE_SIZE_MB,
