@@ -142,7 +142,7 @@ class AadhaarForgeryDetector:
         )
     
     def _load_model(self) -> None:
-        """Load trained model weights"""
+        """Load trained model weights with automatic key remapping"""
         if not self.model_path.exists():
             raise FileNotFoundError(
                 f"Model file not found: {self.model_path}\n"
@@ -162,23 +162,33 @@ class AadhaarForgeryDetector:
                 weights_only=False
             )
             
-            # Handle different checkpoint formats
+            # Extract state dict from checkpoint
             if isinstance(checkpoint, dict):
                 if 'model_state_dict' in checkpoint:
-                    self.model.load_state_dict(checkpoint['model_state_dict'])
+                    state_dict = checkpoint['model_state_dict']
                     logger.info(
                         f"Loaded checkpoint with AUC: "
                         f"{checkpoint.get('best_auc', 'N/A')}"
                     )
                 elif 'state_dict' in checkpoint:
-                    self.model.load_state_dict(checkpoint['state_dict'])
+                    state_dict = checkpoint['state_dict']
                 else:
                     # Assume the dict is the state_dict itself
-                    self.model.load_state_dict(checkpoint)
+                    state_dict = checkpoint
             else:
                 # Direct state dict
-                self.model.load_state_dict(checkpoint)
+                state_dict = checkpoint
             
+            # 🔥 Add 'backbone.' prefix if missing (handles models trained before wrapper)
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                if key.startswith('backbone.'):
+                    new_state_dict[key] = value
+                else:
+                    new_state_dict[f'backbone.{key}'] = value
+            
+            # Use strict=False to ignore any remaining mismatches
+            self.model.load_state_dict(new_state_dict, strict=False)
             self.model.to(self.device)
             self.model.eval()
             
