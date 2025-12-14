@@ -2,6 +2,8 @@
 
 Extracts features from claim narratives using Bhasha-Embed for Hinglish text,
 combined with behavioral and document-based features.
+
+FIXED VERSION - Resolves column name mismatch bug between dataset and model.
 """
 
 import pandas as pd
@@ -51,7 +53,7 @@ class FeatureEngineer:
         self.embedder = None
         self.pca = PCA(n_components=pca_dims, random_state=42)
         self.is_fitted = False
-        self.expected_features = expected_features  # Store for feature alignment
+        self.expected_features = expected_features
         
         # Feature column tracking
         self.numeric_features = [
@@ -76,7 +78,10 @@ class FeatureEngineer:
             "has_discharge",
         ]
         
-        self.categorical_features = ["product", "city", "subtype"]
+        # 🔧 FIXED: Updated to match dataset column names
+        self.categorical_features = ["product_type", "city", "claim_subtype"]
+        self.categorical_prefixes = ["product", "city", "subtype"]
+        
         self.embedding_cols = [f"emb_{i}" for i in range(pca_dims)]
         
         logger.info(f"FeatureEngineer initialized with {pca_dims} PCA dimensions")
@@ -108,26 +113,33 @@ class FeatureEngineer:
         """
         logger.info("Creating time-aware features...")
         
-        if "incident_date" not in df.columns:
-            logger.error("Missing 'incident_date' column in DataFrame")
+        # 🔧 FIXED: Support both 'incident_date' and 'claim_date'
+        date_col = None
+        if "incident_date" in df.columns:
+            date_col = "incident_date"
+        elif "claim_date" in df.columns:
+            date_col = "claim_date"
+            df["incident_date"] = df["claim_date"]
+        else:
+            logger.error("Missing 'incident_date' or 'claim_date' column in DataFrame")
             raise ValueError(
-                "Missing required column: 'incident_date'. "
+                "Missing required column: 'incident_date' or 'claim_date'. "
                 "This column is required for time-aware feature engineering."
             )
         
         try:
             df["incident_date"] = pd.to_datetime(df["incident_date"])
-            logger.debug(f"Converted incident_date to datetime (min: {df['incident_date'].min()}, max: {df['incident_date'].max()})")
+            logger.debug(f"Converted {date_col} to datetime (min: {df['incident_date'].min()}, max: {df['incident_date'].max()})")
         except Exception as e:
-            logger.error(f"Failed to parse incident_date: {e}")
+            logger.error(f"Failed to parse {date_col}: {e}")
             raise ValueError(
-                f"Invalid 'incident_date' format. Expected ISO format (YYYY-MM-DD). "
+                f"Invalid '{date_col}' format. Expected ISO format (YYYY-MM-DD). "
                 f"Error: {str(e)}"
             )
         
         null_count = df["incident_date"].isna().sum()
         if null_count > 0:
-            logger.warning(f"Found {null_count} null incident_date values. Filling with current date.")
+            logger.warning(f"Found {null_count} null {date_col} values. Filling with current date.")
             df["incident_date"] = df["incident_date"].fillna(pd.Timestamp.now())
         
         try:
@@ -259,7 +271,6 @@ class FeatureEngineer:
             
             logger.debug(f"Raw embeddings shape: {embeddings.shape}")
             
-            # Handle single claims (n_samples < pca_dims)
             n_samples = embeddings.shape[0]
             embedding_dim = embeddings.shape[1]
             
@@ -269,25 +280,20 @@ class FeatureEngineer:
                     f"Using adjusted embeddings without PCA reduction."
                 )
                 
-                # Adjust embedding dimensions to match pca_dims
                 if embedding_dim < self.pca_dims:
-                    # Pad with zeros if embedding is smaller than pca_dims
                     padding = np.zeros((n_samples, self.pca_dims - embedding_dim))
                     reduced = np.hstack([embeddings, padding])
                     logger.debug(f"Padded embeddings from {embedding_dim} to {self.pca_dims} dimensions")
                 else:
-                    # Truncate if embedding is larger than pca_dims
                     reduced = embeddings[:, :self.pca_dims]
                     logger.debug(f"Truncated embeddings from {embedding_dim} to {self.pca_dims} dimensions")
                 
                 logger.info(f"Adjusted embeddings shape: {reduced.shape}")
                 return reduced
             
-            # Normal PCA flow for multiple samples
             if not self.is_fitted:
                 logger.info(f"Fitting PCA to reduce to {self.pca_dims} dimensions...")
                 
-                # Ensure we don't try to fit with more components than samples
                 effective_dims = min(self.pca_dims, n_samples)
                 
                 if effective_dims < self.pca_dims:
@@ -302,7 +308,6 @@ class FeatureEngineer:
                 variance_retained = self.pca.explained_variance_ratio_.sum()
                 logger.success(f"PCA fitted: {variance_retained:.2%} variance retained")
                 
-                # Pad to target dims if necessary
                 if reduced.shape[1] < self.pca_dims:
                     padding = np.zeros((reduced.shape[0], self.pca_dims - reduced.shape[1]))
                     reduced = np.hstack([reduced, padding])
@@ -312,7 +317,6 @@ class FeatureEngineer:
                 logger.debug("Transforming embeddings with existing PCA...")
                 reduced = self.pca.transform(embeddings)
                 
-                # Pad to target dims if necessary
                 if reduced.shape[1] < self.pca_dims:
                     padding = np.zeros((reduced.shape[0], self.pca_dims - reduced.shape[1]))
                     reduced = np.hstack([reduced, padding])
@@ -326,13 +330,7 @@ class FeatureEngineer:
             raise
 
     def _normalize_column_names(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Normalize column names to match trained model expectations.
-        
-        CRITICAL FIX v2: Preserves embedding column underscores!
-        - Numeric features: 'days_since_policy_start' -> 'dayssincepolicystart'
-        - Categorical dummies: 'product_health' -> 'product_health' (NO CHANGE)
-        - Embedding columns: 'emb_0' -> 'emb_0' (NO CHANGE - keep underscores!)
+        """Normalize column names to match trained model expectations.
         
         Args:
             df: DataFrame with feature columns
@@ -342,33 +340,21 @@ class FeatureEngineer:
         """
         logger.debug("Normalizing column names to match model format...")
         
-        # Save ID columns if they exist
         id_cols = [c for c in ['claim_id', 'claimant_id', 'policy_id'] if c in df.columns]
-        
-        # Categorical prefixes from pd.get_dummies()
         categorical_prefixes = ('product_', 'city_', 'subtype_')
-        
-        # 🔥 CRITICAL FIX: Embedding column pattern (emb_0, emb_1, etc.)
         embedding_prefix = 'emb_'
         
-        # Create mapping for normalization
         rename_map = {}
         for col in df.columns:
             if col in id_cols:
-                # Don't rename ID columns
                 continue
             
             if col.startswith(categorical_prefixes):
-                # DON'T normalize categorical dummy columns (product_health, city_Delhi, etc.)
                 continue
             
             if col.startswith(embedding_prefix):
-                # 🔥 FIX: DON'T normalize embedding columns! Keep "emb_0" format.
-                # Model was trained with emb_0, emb_1, etc. (WITH underscores)
                 continue
             
-            # Normalize only numeric feature columns
-            # Remove underscores and convert to lowercase
             normalized = col.replace('_', '').lower()
             if col != normalized:
                 rename_map[col] = normalized
@@ -383,13 +369,7 @@ class FeatureEngineer:
         return df
 
     def _align_features_with_model(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Align engineered features with model's expected feature schema.
-        
-        CRITICAL FIX: Ensures feature matrix matches trained model exactly.
-        - Adds missing columns with zeros (for unseen categories/embeddings)
-        - Removes extra columns not in training
-        - Preserves column order from training
+        """Align engineered features with model's expected feature schema.
         
         Args:
             df: DataFrame with engineered features
@@ -403,7 +383,6 @@ class FeatureEngineer:
         
         logger.info("Aligning features with model schema...")
         
-        # Separate ID columns from feature columns
         id_cols = [c for c in ['claim_id', 'claimant_id', 'policy_id'] if c in df.columns]
         feature_cols = [c for c in df.columns if c not in id_cols]
         
@@ -418,7 +397,6 @@ class FeatureEngineer:
                 f"Adding {len(missing_features)} missing features with zeros. "
                 f"Sample: {list(missing_features)[:5]}"
             )
-            # Add missing columns with zeros
             for feat in missing_features:
                 df[feat] = 0
         
@@ -427,10 +405,8 @@ class FeatureEngineer:
                 f"Removing {len(extra_features)} extra features not in training. "
                 f"Sample: {list(extra_features)[:5]}"
             )
-            # Drop extra columns
             df = df.drop(columns=list(extra_features))
         
-        # Reorder columns to match training (IDs first, then features in expected order)
         final_cols = id_cols + self.expected_features
         df = df[[c for c in final_cols if c in df.columns]]
         
@@ -452,11 +428,10 @@ class FeatureEngineer:
         Args:
             df: Raw claim DataFrame
             narrative_col: Name of narrative text column
-            keep_ids: Whether to KEEP ID columns in output (claim_id, claimant_id, policy_id)
-                     Default: True (keeps IDs for tracking)
+            keep_ids: Whether to KEEP ID columns in output
             
         Returns:
-            Feature matrix with embeddings + engineered features (normalized column names)
+            Feature matrix with embeddings + engineered features
         """
         logger.info(f"Starting feature engineering pipeline for {len(df)} claims...")
         
@@ -471,7 +446,11 @@ class FeatureEngineer:
             df = self.create_document_features(df)
             
             logger.info("Step 4/5: One-hot encoding categorical features...")
-            df_cat = pd.get_dummies(df[self.categorical_features], prefix=self.categorical_features)
+            # 🔧 FIXED: Use correct column names and prefixes
+            df_cat = pd.get_dummies(
+                df[self.categorical_features], 
+                prefix=self.categorical_prefixes
+            )
             logger.debug(f"Categorical features: {df_cat.shape[1]} columns created")
             
             logger.info("Step 5/5: Generating narrative embeddings...")
@@ -489,7 +468,6 @@ class FeatureEngineer:
                 axis=1,
             )
             
-            # Keep IDs if requested (before normalization)
             if keep_ids:
                 id_cols = ["claim_id", "claimant_id", "policy_id"]
                 existing_ids = [c for c in id_cols if c in df.columns]
@@ -500,10 +478,7 @@ class FeatureEngineer:
             else:
                 logger.info("ID columns excluded from feature matrix")
             
-            # Normalize column names to match model (FIXED: preserves categorical dummies AND embeddings)
             feature_df = self._normalize_column_names(feature_df)
-            
-            # NEW: Align features with model's expected schema
             feature_df = self._align_features_with_model(feature_df)
             
             logger.success(
