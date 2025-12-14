@@ -105,7 +105,7 @@ class ForgeryDetector:
         logger.info(f"Loaded config: threshold={self.threshold}, size={self.input_size}")
 
     def _load_model(self) -> None:
-        """Load trained ResNet50 model weights"""
+        """Load trained ResNet50 model weights with automatic key remapping"""
         if not self.model_path.exists():
             raise FileNotFoundError(
                 f"Model file not found: {self.model_path}. "
@@ -114,7 +114,17 @@ class ForgeryDetector:
 
         self.model = ForgeryDetectorCNN(pretrained=False)
         state = torch.load(self.model_path, map_location=self.device)
-        self.model.load_state_dict(state)
+        
+        # 🔥 Add 'backbone.' prefix if missing (handles models trained before wrapper)
+        new_state = {}
+        for key, value in state.items():
+            if key.startswith('backbone.'):
+                new_state[key] = value
+            else:
+                new_state[f'backbone.{key}'] = value
+        
+        # Use strict=False to ignore any remaining mismatches
+        self.model.load_state_dict(new_state, strict=False)
         self.model.to(self.device)
         self.model.eval()
 
