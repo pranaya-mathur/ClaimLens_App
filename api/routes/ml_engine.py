@@ -23,14 +23,18 @@ class ClaimRequest(BaseModel):
     claim_id: str
     claimant_id: str
     policy_id: str
-    product: str = Field(..., description="Product type: motor/health/life/property")
+    # 🔧 FIXED: Match dataset column names with backward-compatible aliases
+    product_type: str = Field(..., alias="product", description="Product type: motor/health/life/property")
     city: str = Field(..., description="City name")
-    subtype: str = Field(..., description="Claim subtype")
+    claim_subtype: str = Field(..., alias="subtype", description="Claim subtype")
     claim_amount: float
     days_since_policy_start: int
     narrative: str = Field(..., description="Claim narrative in Hinglish")
     documents_submitted: Optional[str] = Field(None, description="Comma-separated doc list")
     incident_date: str = Field(..., description="ISO format date")
+    
+    class Config:
+        populate_by_name = True  # Allow both field name and alias
 
 
 class BatchClaimRequest(BaseModel):
@@ -212,7 +216,7 @@ async def score_single_claim(request: ClaimRequest):
         engineer = get_feature_engineer()
         
         # Convert request to DataFrame
-        claim_data = pd.DataFrame([request.dict()])
+        claim_data = pd.DataFrame([request.dict(by_alias=False)])  # Use actual field names
         
         # Engineer features
         logger.info(f"Engineering features for claim {request.claim_id}")
@@ -275,7 +279,7 @@ async def score_with_explanation(request: ClaimRequest):
         engineer = get_feature_engineer()
         
         # Convert and engineer features
-        claim_data = pd.DataFrame([request.dict()])
+        claim_data = pd.DataFrame([request.dict(by_alias=False)])  # Use actual field names
         features = engineer.engineer_features(claim_data, keep_ids=True)
         engineer.validate_no_leakage(features)
         
@@ -334,7 +338,7 @@ async def score_batch_claims(request: BatchClaimRequest):
         logger.info(f"Batch scoring {len(request.claims)} claims")
         
         # Convert to DataFrame
-        claims_data = pd.DataFrame([claim.dict() for claim in request.claims])
+        claims_data = pd.DataFrame([claim.dict(by_alias=False) for claim in request.claims])  # Use actual field names
         
         # Engineer features for batch
         features = engineer.engineer_features(claims_data, keep_ids=True)
@@ -436,7 +440,7 @@ async def explain_prediction(request: ClaimRequest):
         engineer = get_feature_engineer()
         
         # Engineer features
-        claim_data = pd.DataFrame([request.dict()])
+        claim_data = pd.DataFrame([request.dict(by_alias=False)])  # Use actual field names
         features = engineer.engineer_features(claim_data, keep_ids=True)
         engineer.validate_no_leakage(features)
         
