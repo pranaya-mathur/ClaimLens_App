@@ -2,7 +2,7 @@
 ClaimLens AI - Comprehensive Fraud Detection Dashboard
 Enhanced UI with Document Upload & Multi-Modal Analysis
 ✅ STABLE VERSION - Individual API endpoints (NOT unified)
-✅ v2.2 - Integrated Generic Document Verification
+✅ v2.2.1 - Fixed PDF support & Dynamic Subtypes
 """
 import streamlit as st
 import requests
@@ -107,6 +107,20 @@ def get_risk_color(risk_level):
     }
     return colors.get(risk_level, "⚪")
 
+def display_document_preview(file, doc_name="Document"):
+    """Display document preview handling both images and PDFs"""
+    if file:
+        if file.type == "application/pdf":
+            file_size = len(file.getvalue()) / 1024  # KB
+            st.success(f"📄 PDF uploaded successfully")
+            st.caption(f"File: {file.name} ({file_size:.1f} KB)")
+        else:
+            try:
+                st.image(file, use_container_width=True)
+            except Exception as e:
+                st.warning(f"⚠️ Preview unavailable: {file.name}")
+                st.caption("File uploaded successfully")
+
 # Sidebar
 with st.sidebar:
     st.markdown("### 🤖 AI Status")
@@ -122,7 +136,7 @@ with st.sidebar:
         st.error("❌ Cannot connect to API")
     
     st.markdown("---")
-    st.markdown("### 📋 v2.2 Features:")
+    st.markdown("### 📋 v2.2.1 Features:")
     st.markdown("""
     - ✅ Semantic Verdicts
     - ✅ Critical Flags
@@ -131,19 +145,23 @@ with st.sidebar:
     - ✅ Adaptive Weighting
     - ✅ Network Analysis
     - ✅ **Integrated Doc Verify** 🆕
+    - ✅ **PDF Support** 🆕
+    - ✅ **Smart Subtypes** 🆕
     """)
     
     st.markdown("---")
     st.markdown("### ℹ️ About This Version")
     st.markdown("""
-    **STABLE BUILD v2.2**
+    **STABLE BUILD v2.2.1**
     
     • ML Engine: CatBoost scoring
     • CV Engine: Complete doc verification
     • Graph Engine: Network analysis
     • LLM Engine: Groq explanations
     
-    ✅ All documents now in final score!
+    ✅ All documents in final score!
+    ✅ PDF handling fixed!
+    ✅ Dynamic claim subtypes!
     """)
     
     st.markdown("---")
@@ -172,9 +190,10 @@ if "AI-Powered" in page:
             claim_id = st.text_input("🔖 Claim ID", value="CLM2024001", help="Unique claim identifier")
         
         with col2:
-            claim_subtype = st.selectbox(
-                "📦 Claim Subtype",
-                ["accident", "theft", "fire", "natural_disaster", "mechanical", "vandalism"]
+            product_type = st.selectbox(
+                "🚗 Product Type",
+                ["motor", "health", "life", "property"],
+                help="Select insurance product type"
             )
         
         with col3:
@@ -191,10 +210,19 @@ if "AI-Powered" in page:
         
         col5, col6, col7, col8 = st.columns(4)
         
+        # ⭐ DYNAMIC CLAIM SUBTYPE based on Product Type
         with col5:
-            product_type = st.selectbox(
-                "🚗 Product Type",
-                ["motor", "health", "life", "property"]
+            subtype_options = {
+                "motor": ["accident", "theft", "vandalism", "fire", "natural_disaster"],
+                "health": ["illness", "surgery", "emergency", "hospitalization", "preventive_care"],
+                "life": ["death", "maturity", "surrender", "critical_illness"],
+                "property": ["fire", "theft", "natural_disaster", "water_damage", "vandalism"]
+            }
+            
+            claim_subtype = st.selectbox(
+                "📦 Claim Subtype",
+                subtype_options.get(product_type, ["accident"]),
+                help=f"Subtype options for {product_type} insurance"
             )
         
         with col6:
@@ -222,19 +250,26 @@ if "AI-Powered" in page:
                 help="Comma-separated document types"
             )
         
-        # Narrative
+        # Narrative with context-aware placeholder
+        narrative_placeholders = {
+            "motor": "Meri gaadi ko accident ho gaya tha highway pe. Front bumper aur headlight damage hai.",
+            "health": "Patient ko chest pain tha aur emergency surgery karni padi. Hospital mein 5 din admit the.",
+            "life": "Policyholder ka sudden cardiac arrest se death ho gaya. Death certificate attached hai.",
+            "property": "Ghar mein fire lag gayi thi kitchen se. Living room aur bedroom ka samaan damage hua."
+        }
+        
         narrative = st.text_area(
             "📝 Claim Narrative (Hinglish supported)",
-            value="Meri gaadi ko accident ho gaya tha highway pe. Front bumper aur headlight damage hai.",
+            value=narrative_placeholders.get(product_type, "Describe the incident..."),
             height=100,
             help="Describe the claim incident in English or Hinglish"
         )
     
     st.markdown("---")
     
-    # ⭐ UPDATED: 4 Column Document Upload (Including Generic Docs)
+    # ⭐ UPDATED: 4 Column Document Upload with PDF Support
     st.markdown("## 📤 Upload ALL Documents for Comprehensive Verification")
-    st.info("💡 **New!** Supporting documents (death certificates, hospital bills, licenses) are now included in fraud assessment")
+    st.info("💡 **New!** PDF support added • Supporting documents now included in final score")
     
     doc_col1, doc_col2, doc_col3, doc_col4 = st.columns(4)
     
@@ -244,10 +279,9 @@ if "AI-Powered" in page:
             "Upload PAN Card",
             type=["jpg", "jpeg", "png", "pdf"],
             key="pan",
-            help="Upload PAN card image for forgery detection"
+            help="Upload PAN card image or PDF for forgery detection"
         )
-        if pan_file:
-            st.image(pan_file, use_container_width=True)
+        display_document_preview(pan_file, "PAN Card")
     
     with doc_col2:
         st.markdown("### 🪪 Aadhaar Card")
@@ -257,21 +291,19 @@ if "AI-Powered" in page:
             key="aadhaar",
             help="Upload Aadhaar card for verification"
         )
-        if aadhaar_file:
-            st.image(aadhaar_file, use_container_width=True)
+        display_document_preview(aadhaar_file, "Aadhaar Card")
     
     with doc_col3:
         st.markdown("### 🚗 Vehicle/Damage Photo")
         vehicle_file = st.file_uploader(
-            "Upload Vehicle Image",
+            "Upload Vehicle/Damage Image",
             type=["jpg", "jpeg", "png"],
             key="vehicle",
-            help="Upload damaged vehicle photo for CV analysis"
+            help="Upload damaged vehicle/property photo for CV analysis"
         )
-        if vehicle_file:
-            st.image(vehicle_file, use_container_width=True)
+        display_document_preview(vehicle_file, "Vehicle Photo")
     
-    # ⭐ NEW: 4th Column for Supporting Documents
+    # ⭐ 4th Column for Supporting Documents
     with doc_col4:
         st.markdown("### 📋 Supporting Document")
         st.caption("Death Cert, Hospital Bills, License, etc.")
@@ -303,10 +335,9 @@ if "AI-Powered" in page:
             "Upload Supporting Doc",
             type=["jpg", "jpeg", "png", "pdf"],
             key="supporting",
-            help="Upload supporting document for generic forgery detection"
+            help="Upload supporting document for generic forgery detection (PDF supported)"
         )
-        if supporting_file:
-            st.image(supporting_file, use_container_width=True)
+        display_document_preview(supporting_file, "Supporting Document")
     
     st.markdown("---")
     
@@ -699,7 +730,7 @@ st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center; color: gray;'>
-        ClaimLens AI v2.2 | Complete Multi-Modal Fraud Detection | Built with ❤️ | All Documents Verified ✅
+        ClaimLens AI v2.2.1 | Multi-Modal Fraud Detection + PDF Support + Smart Subtypes | Built with ❤️ | Error-Free ✅
     </div>
     """,
     unsafe_allow_html=True
