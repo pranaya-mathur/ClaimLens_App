@@ -226,7 +226,7 @@ class DamageDetector:
     
     def _load_severity_model(self, model_path: str) -> nn.Module:
         """
-        Load EfficientNet-B0 severity classifier
+        Load EfficientNet-B0 severity classifier with automatic key remapping.
         
         Args:
             model_path: Path to .pth checkpoint
@@ -267,13 +267,22 @@ class DamageDetector:
         else:
             state_dict = checkpoint
         
-        # Load with strict=False to handle minor mismatches
+        # 🔥 Add 'backbone.' prefix if missing (handles models trained before wrapper)
+        # This prevents "Missing key(s) in state_dict" errors
+        new_state_dict = {}
+        for key, value in state_dict.items():
+            if key.startswith('backbone.'):
+                new_state_dict[key] = value
+            else:
+                new_state_dict[f'backbone.{key}'] = value
+        
+        # Load with strict=False to handle any remaining mismatches gracefully
         try:
-            model.load_state_dict(state_dict, strict=True)
+            model.load_state_dict(new_state_dict, strict=True)
             logger.info("Loaded severity model with strict=True")
         except Exception as e:
             logger.warning(f"Strict loading failed, trying strict=False: {str(e)[:100]}")
-            model.load_state_dict(state_dict, strict=False)
+            model.load_state_dict(new_state_dict, strict=False)
             logger.info("Loaded severity model with strict=False (some weights may not match)")
         
         return model
