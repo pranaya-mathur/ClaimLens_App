@@ -20,8 +20,9 @@ from .forgery_utils import ForgeryUtils
 
 PathLike = Union[str, Path]
 
-DEFAULT_MODEL_PATH = Path("models/forgery_detector_latest_run.pth")
-DEFAULT_CONFIG_PATH = Path("models/forgery_detector_latest_run_config.json")
+# 🔧 FIX: Updated path to forgery_detection subdirectory
+DEFAULT_MODEL_PATH = Path("models/forgery_detection/forgery_detector_latest_run.pth")
+DEFAULT_CONFIG_PATH = Path("models/forgery_detection/forgery_detector_latest_run_config.json")
 
 
 @dataclass
@@ -109,7 +110,7 @@ class ForgeryDetector:
         if not self.model_path.exists():
             raise FileNotFoundError(
                 f"Model file not found: {self.model_path}. "
-                f"Please place the .pth file in the models/ directory."
+                f"Please place the .pth file in the models/forgery_detection/ directory."
             )
 
         self.model = ForgeryDetectorCNN(pretrained=False)
