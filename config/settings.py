@@ -36,8 +36,13 @@ class Settings(BaseSettings):
     # ========================================
     # CV Model Paths - Vehicle Damage Detection
     # ========================================
-    PARTS_MODEL_PATH: str = "models/damage_detection/yolo11m_best.pt"
+    # Parts detection model (YOLO11n for vehicle part segmentation)
+    PARTS_MODEL_PATH: str = "models/parts_segmentation/yolo11n_best.pt"
+    
+    # Damage detection model (YOLO11m for damage identification)
     DAMAGE_MODEL_PATH: str = "models/damage_detection/yolo11m_best.pt"
+    
+    # Severity classification model (EfficientNet B0)
     SEVERITY_MODEL_PATH: str = "models/severity_classification/efficientnet_b0_best.pth"
     
     # ========================================
