@@ -144,7 +144,7 @@ class PANForgeryDetector:
         )
     
     def _load_model(self) -> None:
-        """Load trained model weights"""
+        """Load trained model weights with automatic key remapping"""
         if not self.model_path.exists():
             raise FileNotFoundError(
                 f"Model file not found: {self.model_path}\n"
@@ -158,13 +158,22 @@ class PANForgeryDetector:
             # Initialize model
             self.model = PANForgeryDetectorCNN(pretrained=False)
             
-            # Load state dict directly (training saved state_dict only)
+            # Load state dict
             state_dict = torch.load(
                 self.model_path,
                 map_location=self.device
             )
             
-            self.model.load_state_dict(state_dict)
+            # 🔥 Add 'backbone.' prefix if missing (handles models trained before wrapper)
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                if key.startswith('backbone.'):
+                    new_state_dict[key] = value
+                else:
+                    new_state_dict[f'backbone.{key}'] = value
+            
+            # Use strict=False to ignore any remaining mismatches
+            self.model.load_state_dict(new_state_dict, strict=False)
             self.model.to(self.device)
             self.model.eval()
             
