@@ -2,6 +2,7 @@
 ClaimLens AI - Comprehensive Fraud Detection Dashboard
 Enhanced UI with Document Upload & Multi-Modal Analysis
 ✅ STABLE VERSION - Individual API endpoints (NOT unified)
+✅ v2.2 - Integrated Generic Document Verification
 """
 import streamlit as st
 import requests
@@ -121,7 +122,7 @@ with st.sidebar:
         st.error("❌ Cannot connect to API")
     
     st.markdown("---")
-    st.markdown("### 📋 v2.0 Features:")
+    st.markdown("### 📋 v2.2 Features:")
     st.markdown("""
     - ✅ Semantic Verdicts
     - ✅ Critical Flags
@@ -129,20 +130,20 @@ with st.sidebar:
     - ✅ LLM Explanations
     - ✅ Adaptive Weighting
     - ✅ Network Analysis
-    - ✅ Generic Doc Verify  🆕
+    - ✅ **Integrated Doc Verify** 🆕
     """)
     
     st.markdown("---")
     st.markdown("### ℹ️ About This Version")
     st.markdown("""
-    **STABLE BUILD** - Uses individual API endpoints
+    **STABLE BUILD v2.2**
     
     • ML Engine: CatBoost scoring
-    • CV Engine: Document verification
+    • CV Engine: Complete doc verification
     • Graph Engine: Network analysis
     • LLM Engine: Groq explanations
     
-    ✅ All modules verified and working
+    ✅ All documents now in final score!
     """)
     
     st.markdown("---")
@@ -150,16 +151,15 @@ with st.sidebar:
         "Navigate",
         [
             "🎯 AI-Powered Claim Analysis",
-            "📄 Generic Document Verification",  # NEW!
             "📊 Analytics Dashboard",
             "🕸️ Fraud Networks"
         ]
     )
 
-# Page 1: AI-Powered Claim Analysis
+# Page 1: AI-Powered Claim Analysis (INTEGRATED)
 if "AI-Powered" in page:
     st.markdown('<p class="main-header">🤖 ClaimLens AI</p>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">✨ Explainable AI Fraud Detection | Powered by Groq + Llama-3.3-70B</p>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">✨ Complete Fraud Detection with Integrated Document Verification</p>', unsafe_allow_html=True)
     st.markdown("---")
     
     st.markdown("## 🎯 AI-Powered Claim Analysis")
@@ -232,10 +232,11 @@ if "AI-Powered" in page:
     
     st.markdown("---")
     
-    # Document Upload Section
-    st.markdown("## 📤 Upload Documents for Verification")
+    # ⭐ UPDATED: 4 Column Document Upload (Including Generic Docs)
+    st.markdown("## 📤 Upload ALL Documents for Comprehensive Verification")
+    st.info("💡 **New!** Supporting documents (death certificates, hospital bills, licenses) are now included in fraud assessment")
     
-    doc_col1, doc_col2, doc_col3 = st.columns(3)
+    doc_col1, doc_col2, doc_col3, doc_col4 = st.columns(4)
     
     with doc_col1:
         st.markdown("### 🆔 PAN Card")
@@ -270,83 +271,144 @@ if "AI-Powered" in page:
         if vehicle_file:
             st.image(vehicle_file, use_container_width=True)
     
+    # ⭐ NEW: 4th Column for Supporting Documents
+    with doc_col4:
+        st.markdown("### 📋 Supporting Document")
+        st.caption("Death Cert, Hospital Bills, License, etc.")
+        
+        supporting_doc_type = st.selectbox(
+            "Document Type",
+            [
+                "license",
+                "passport",
+                "voter_id",
+                "bank_statement",
+                "hospital_bill",
+                "death_certificate",
+                "other"
+            ],
+            format_func=lambda x: {
+                "license": "🚗 Driving License",
+                "passport": "✈️ Passport",
+                "voter_id": "🗳️ Voter ID",
+                "bank_statement": "🏦 Bank Statement",
+                "hospital_bill": "🏥 Hospital Bill",
+                "death_certificate": "⚰️ Death Certificate",
+                "other": "📎 Other"
+            }[x],
+            key="supporting_type"
+        )
+        
+        supporting_file = st.file_uploader(
+            "Upload Supporting Doc",
+            type=["jpg", "jpeg", "png", "pdf"],
+            key="supporting",
+            help="Upload supporting document for generic forgery detection"
+        )
+        if supporting_file:
+            st.image(supporting_file, use_container_width=True)
+    
     st.markdown("---")
     
-    # Analyze Button
+    # ⭐ ANALYZE BUTTON - Updated Logic
     if st.button("🔬 Analyze with AI", type="primary", use_container_width=True):
         with st.spinner("🤖 AI is analyzing your claim..."):
             # Initialize results
             results = {
-                "document_verification": None,
-                "cv_analysis": None,
+                "documents": [],
                 "ml_score": None,
                 "graph_analysis": None
             }
             
-            # 1. Component Risk Analysis
+            # ⭐ 1. DOCUMENT VERIFICATION - ALL DOCUMENTS
             st.markdown("### 📋 Component Risk Analysis")
             comp_col1, comp_col2, comp_col3 = st.columns(3)
             
-            # Document Verification
             with comp_col1:
-                st.markdown("#### ⚠️ Document Verification")
-                if pan_file or aadhaar_file:
-                    try:
-                        # Analyze PAN
-                        if pan_file:
-                            pan_file.seek(0)  # Reset file pointer
-                            files = {"file": (pan_file.name, pan_file, pan_file.type)}
-                            pan_response = requests.post(
-                                f"{API_URL}/api/documents/verify-pan",
-                                files=files,
-                                timeout=30
-                            )
-                            if pan_response.status_code == 200:
-                                pan_result = pan_response.json()
-                                results["document_verification"] = pan_result
-                                
-                                # Display result
-                                risk = "SUSPICIOUS" if pan_result.get("risk_score", 0) > 0.4 else "CLEAN"
-                                confidence = pan_result.get("confidence", 0) * 100
-                                
-                                if risk == "SUSPICIOUS":
-                                    st.error(f"🔴 {risk}")
-                                else:
-                                    st.success(f"🟢 {risk}")
-                                
-                                st.metric("Confidence", f"{confidence:.0f}%")
-                                st.caption(pan_result.get("recommendation", "No recommendation"))
-                        
-                        # Analyze Aadhaar
-                        elif aadhaar_file:
-                            aadhaar_file.seek(0)
-                            files = {"file": (aadhaar_file.name, aadhaar_file, aadhaar_file.type)}
-                            aadhaar_response = requests.post(
-                                f"{API_URL}/api/documents/verify-aadhaar",
-                                files=files,
-                                timeout=30
-                            )
-                            if aadhaar_response.status_code == 200:
-                                aadhaar_result = aadhaar_response.json()
-                                results["document_verification"] = aadhaar_result
-                                
-                                risk = "SUSPICIOUS" if aadhaar_result.get("risk_score", 0) > 0.4 else "CLEAN"
-                                confidence = aadhaar_result.get("confidence", 0) * 100
-                                
-                                if risk == "SUSPICIOUS":
-                                    st.error(f"🔴 {risk}")
-                                else:
-                                    st.success(f"🟢 {risk}")
-                                
-                                st.metric("Confidence", f"{confidence:.0f}%")
-                                st.caption(aadhaar_result.get("recommendation", "No recommendation"))
-                    except Exception as e:
-                        st.error(f"Error: {str(e)}")
-                else:
-                    st.warning("No documents uploaded")
-                    st.caption("Upload PAN/Aadhaar for verification")
+                st.markdown("#### 📄 Document Verification")
+                
+                documents_analyzed = []
+                total_doc_risk = 0
+                doc_count = 0
+                
+                try:
+                    # Analyze PAN
+                    if pan_file:
+                        pan_file.seek(0)
+                        files = {"file": (pan_file.name, pan_file, pan_file.type)}
+                        pan_response = requests.post(
+                            f"{API_URL}/api/documents/verify-pan",
+                            files=files,
+                            timeout=30
+                        )
+                        if pan_response.status_code == 200:
+                            pan_result = pan_response.json()
+                            risk_score = pan_result.get("risk_score", 0)
+                            documents_analyzed.append(("PAN Card", risk_score))
+                            total_doc_risk += risk_score * 100
+                            doc_count += 1
+                    
+                    # Analyze Aadhaar
+                    if aadhaar_file:
+                        aadhaar_file.seek(0)
+                        files = {"file": (aadhaar_file.name, aadhaar_file, aadhaar_file.type)}
+                        aadhaar_response = requests.post(
+                            f"{API_URL}/api/documents/verify-aadhaar",
+                            files=files,
+                            timeout=30
+                        )
+                        if aadhaar_response.status_code == 200:
+                            aadhaar_result = aadhaar_response.json()
+                            risk_score = aadhaar_result.get("risk_score", 0)
+                            documents_analyzed.append(("Aadhaar Card", risk_score))
+                            total_doc_risk += risk_score * 100
+                            doc_count += 1
+                    
+                    # ⭐ Analyze Supporting Document (Generic Forgery Detector)
+                    if supporting_file:
+                        supporting_file.seek(0)
+                        files = {"file": (supporting_file.name, supporting_file, supporting_file.type)}
+                        data = {"document_type": supporting_doc_type}
+                        supporting_response = requests.post(
+                            f"{API_URL}/api/documents/verify-document",
+                            files=files,
+                            data=data,
+                            timeout=30
+                        )
+                        if supporting_response.status_code == 200:
+                            supporting_result = supporting_response.json()
+                            risk_score = supporting_result.get("risk_score", 0)
+                            doc_name = supporting_doc_type.replace("_", " ").title()
+                            documents_analyzed.append((doc_name, risk_score))
+                            total_doc_risk += risk_score * 100
+                            doc_count += 1
+                    
+                    # Calculate average document risk
+                    avg_doc_score = total_doc_risk / doc_count if doc_count > 0 else 0
+                    results["documents"] = documents_analyzed
+                    
+                    # Display summary
+                    if avg_doc_score > 50:
+                        st.error(f"🔴 HIGH RISK")
+                    elif avg_doc_score > 30:
+                        st.warning(f"🟡 MEDIUM RISK")
+                    else:
+                        st.success(f"🟢 LOW RISK")
+                    
+                    st.metric("Avg Doc Risk", f"{avg_doc_score:.0f}%")
+                    st.caption(f"{doc_count} documents analyzed")
+                    
+                    # Show individual results
+                    with st.expander("📋 Individual Document Scores"):
+                        for doc_name, risk in documents_analyzed:
+                            risk_pct = risk * 100 if risk < 1 else risk
+                            st.write(f"**{doc_name}:** {risk_pct:.0f}% risk")
+                
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+                    avg_doc_score = 0
             
-            # ML Fraud Score
+            # 2. ML Fraud Score
             with comp_col2:
                 st.markdown("#### 🔴 ML Fraud Score")
                 try:
@@ -355,7 +417,7 @@ if "AI-Powered" in page:
                         "claimant_id": claimant_id,
                         "policy_id": f"POL{claimant_id[4:]}",
                         "product": product_type,
-                        "city": "Mumbai",  # Default
+                        "city": "Mumbai",
                         "subtype": claim_subtype,
                         "claim_amount": float(claim_amount),
                         "days_since_policy_start": int(days_since_policy),
@@ -387,18 +449,20 @@ if "AI-Powered" in page:
                         st.metric("Fraud Probability", f"{fraud_prob:.0f}%")
                         st.caption(f"ML confidence: {fraud_prob:.1f}%")
                     else:
+                        fraud_prob = 0
                         st.error(f"ML API Error: {ml_response.status_code}")
                 
                 except Exception as e:
+                    fraud_prob = 0
                     st.error(f"Error: {str(e)}")
             
-            # Graph Analysis - FIXED: Send claim_id as string
+            # 3. Graph Analysis
             with comp_col3:
                 st.markdown("#### 🕸️ Graph Analysis")
                 try:
                     graph_response = requests.post(
                         f"{API_URL}/api/fraud/score",
-                        json={"claim_id": claim_id},  # ✅ FIXED: Send as string directly
+                        json={"claim_id": claim_id},
                         timeout=10
                     )
                     
@@ -414,42 +478,32 @@ if "AI-Powered" in page:
                         else:
                             st.success("🟢 CLEAN")
                         
-                        st.metric("Network Score", "88%")
+                        graph_score = graph_result.get("final_risk_score", 0.12) * 100
+                        st.metric("Network Score", f"{graph_score:.0f}%")
                         st.caption("No fraud network detected" if fraud_count == 0 else f"{fraud_count} suspicious connections")
                     else:
-                        st.info(f"Graph data unavailable (Status: {graph_response.status_code})")
+                        graph_score = 12
+                        st.info(f"Graph data unavailable")
                         st.caption("Requires Neo4j database")
                 
                 except Exception as e:
-                    st.info(f"Graph analysis offline: {str(e)}")
+                    graph_score = 12
+                    st.info(f"Graph analysis offline")
                     st.caption("Start Neo4j to enable")
             
             st.markdown("---")
             
-            # Radar Chart
+            # ⭐ UPDATED: Final Risk Calculation with ALL Documents
             st.markdown("### 📊 Risk Component Visualization")
             radar_col1, radar_col2 = st.columns([2, 1])
             
             with radar_col1:
-                # Calculate scores for radar
-                doc_score = 0
-                if results["document_verification"]:
-                    doc_score = results["document_verification"].get("risk_score", 0) * 100
-                
-                ml_score_val = 0
-                if results["ml_score"]:
-                    ml_score_val = results["ml_score"].get("fraud_probability", 0) * 100
-                
-                graph_score = 12  # Default low if no fraud network
-                if results["graph_analysis"]:
-                    graph_score = results["graph_analysis"].get("final_risk_score", 0.12) * 100
-                
                 radar_scores = {
-                    "ML Fraud Score": ml_score_val,
-                    "Document Verification": doc_score,
+                    "ML Fraud Score": fraud_prob,
+                    "Document Verification": avg_doc_score,
                     "Graph Analysis": graph_score,
-                    "Behavioral Patterns": 45,  # Placeholder
-                    "Amount Analysis": 65  # Placeholder
+                    "Behavioral Patterns": 45,
+                    "Amount Analysis": 65
                 }
                 
                 fig_radar = create_radar_chart(radar_scores)
@@ -458,8 +512,8 @@ if "AI-Powered" in page:
             with radar_col2:
                 st.markdown("#### 🎯 Final Assessment")
                 
-                # Calculate weighted risk
-                final_risk = (ml_score_val * 0.4 + doc_score * 0.3 + graph_score * 0.3)
+                # ⭐ NEW FORMULA: Documents get more weight (40%)
+                final_risk = (fraud_prob * 0.3 + avg_doc_score * 0.4 + graph_score * 0.3)
                 
                 if final_risk >= 70:
                     st.error(f"🔴 CRITICAL RISK")
@@ -477,16 +531,24 @@ if "AI-Powered" in page:
                 st.metric("Risk Score", f"{final_risk:.0f}%")
                 st.markdown(f"**Recommendation:** {recommendation}")
                 
+                # Weighting breakdown
+                st.markdown("**Score Breakdown:**")
+                st.write(f"• ML Model: {fraud_prob:.0f}% (30% weight)")
+                st.write(f"• Documents: {avg_doc_score:.0f}% (40% weight)")
+                st.write(f"• Network: {graph_score:.0f}% (30% weight)")
+                
                 # Key factors
                 st.markdown("**Key Risk Factors:**")
                 if claim_amount / premium > 15:
                     st.write("- High claim-to-premium ratio")
                 if days_since_policy < 90:
                     st.write("- Early claim filing")
-                if ml_score_val > 60:
+                if fraud_prob > 60:
                     st.write("- ML model flagged high risk")
-                if doc_score > 50:
+                if avg_doc_score > 50:
                     st.write("- Document verification concerns")
+                if supporting_file and avg_doc_score > 40:
+                    st.write("- Supporting document flagged")
             
             st.markdown("---")
             
@@ -494,12 +556,11 @@ if "AI-Powered" in page:
             st.markdown("### 🧠 AI-Generated Explanation")
             st.markdown("#### 🎯 Explanation for: **Adjuster (Technical)**")
             
-            # Generate LLM explanation if available
             try:
                 llm_payload = {
                     "claim_narrative": narrative,
-                    "ml_fraud_prob": ml_score_val / 100,
-                    "document_risk": doc_score / 100,
+                    "ml_fraud_prob": fraud_prob / 100,
+                    "document_risk": avg_doc_score / 100,
                     "network_risk": graph_score / 100,
                     "claim_amount": claim_amount,
                     "premium": premium,
@@ -517,240 +578,31 @@ if "AI-Powered" in page:
                     llm_result = llm_response.json()
                     explanation = llm_result.get("explanation", "Unable to generate explanation")
                 else:
-                    explanation = "LLM service temporarily unavailable. Showing fallback explanation."
+                    explanation = "LLM service temporarily unavailable."
             except:
                 explanation = "Could not connect to LLM service."
             
-            # Fallback explanation if LLM fails
-            if not explanation or explanation.startswith("Could not") or explanation.startswith("LLM"):
+            # Fallback explanation
+            if not explanation or "Could not" in explanation or "LLM" in explanation:
+                doc_analysis = ""
+                if doc_count > 0:
+                    doc_analysis = f" Document analysis of {doc_count} documents shows {avg_doc_score:.0f}% risk level."
+                
                 explanation = f"""
-This claim requires manual review due to several risk factors. The claim amount of ₹{claim_amount:,} against 
-a premium of ₹{premium:,} represents a {claim_amount/premium:.0f}x ratio, which is significantly higher than average. 
-Additionally, the claim was filed just {days_since_policy} days after policy inception, which statistically correlates 
-with higher fraud risk.
+This claim requires careful review due to multiple risk indicators. The claim amount of ₹{claim_amount:,} against 
+a premium of ₹{premium:,} represents a {claim_amount/premium:.0f}x ratio. The claim was filed {days_since_policy} days 
+after policy inception.{doc_analysis}
 
-Our document verification shows moderate concerns. ML models predict {ml_score_val:.0f}% fraud probability. 
-No fraud network connections were detected.
+Our ML models predict {fraud_prob:.0f}% fraud probability. Network analysis shows {graph_score:.0f}% risk.
 
-We recommend verifying the claimant's history and authenticating all submitted documents before processing.
+**Final Risk Score: {final_risk:.0f}%**
+
+Recommendation: {recommendation}
                 """
             
             st.info(explanation)
 
-# Page 2: Generic Document Verification (NEW!)
-elif "Generic Document" in page:
-    st.markdown('<p class="main-header">📄 Generic Document Verification</p>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">🔍 AI-Powered Forgery Detection for All Document Types</p>', unsafe_allow_html=True)
-    st.markdown("---")
-    
-    st.markdown("""
-    ## 🎯 What Can This Verify?
-    
-    This tool uses our **Generic Forgery Detector** (ResNet50 + ELA + Noise Analysis) to detect:
-    - ✅ Digital tampering and photoshop edits
-    - ✅ Copy-paste forgeries  
-    - ✅ JPEG compression artifacts
-    - ✅ Print-scan-modify patterns
-    - ✅ Quality inconsistencies
-    """)
-    
-    st.markdown("---")
-    
-    # Document type selection
-    st.markdown("### 📋 Select Document Type")
-    
-    doc_type_col1, doc_type_col2 = st.columns(2)
-    
-    with doc_type_col1:
-        document_type = st.selectbox(
-            "Document Category",
-            [
-                "license",
-                "passport", 
-                "voter_id",
-                "bank_statement",
-                "hospital_bill",
-                "death_certificate",
-                "other"
-            ],
-            format_func=lambda x: {
-                "license": "🚗 Driving License",
-                "passport": "✈️ Passport",
-                "voter_id": "🗳️ Voter ID",
-                "bank_statement": "🏦 Bank Statement",
-                "hospital_bill": "🏥 Hospital Bill",
-                "death_certificate": "⚰️ Death Certificate",
-                "other": "📎 Other Document"
-            }[x]
-        )
-    
-    with doc_type_col2:
-        st.info(f"**Selected:** {document_type.replace('_', ' ').title()}")
-        st.caption("Upload the document below for AI analysis")
-    
-    st.markdown("---")
-    
-    # File upload
-    st.markdown("### 📤 Upload Document")
-    
-    uploaded_file = st.file_uploader(
-        f"Upload {document_type.replace('_', ' ').title()} Image",
-        type=["jpg", "jpeg", "png", "pdf"],
-        help="Supported formats: JPG, PNG, PDF (max 10MB)"
-    )
-    
-    if uploaded_file:
-        # Display uploaded image
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            st.image(uploaded_file, caption="Uploaded Document", use_container_width=True)
-        
-        with col2:
-            st.markdown("#### 📊 File Info")
-            file_size = len(uploaded_file.getvalue()) / (1024 * 1024)
-            st.metric("File Size", f"{file_size:.2f} MB")
-            st.metric("Format", uploaded_file.type.split('/')[-1].upper())
-            st.metric("Filename", uploaded_file.name)
-        
-        st.markdown("---")
-        
-        # Analyze button
-        if st.button("🔬 Analyze Document", type="primary", use_container_width=True):
-            with st.spinner("🤖 AI is analyzing the document..."):
-                try:
-                    # Reset file pointer
-                    uploaded_file.seek(0)
-                    
-                    # Prepare request
-                    files = {"file": (uploaded_file.name, uploaded_file, uploaded_file.type)}
-                    data = {"document_type": document_type}
-                    
-                    # Call API
-                    response = requests.post(
-                        f"{API_URL}/api/documents/verify-document",
-                        files=files,
-                        data=data,
-                        timeout=30
-                    )
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        
-                        # Display results
-                        st.markdown("### ✅ Analysis Complete")
-                        st.markdown("---")
-                        
-                        # Main verdict
-                        verdict_col1, verdict_col2, verdict_col3 = st.columns(3)
-                        
-                        with verdict_col1:
-                            is_valid = result.get("is_valid", False)
-                            if is_valid:
-                                st.success("✅ AUTHENTIC")
-                            else:
-                                st.error("🔴 SUSPICIOUS")
-                            
-                            st.metric(
-                                "Verdict",
-                                "AUTHENTIC" if is_valid else "FORGED/TAMPERED"
-                            )
-                        
-                        with verdict_col2:
-                            confidence = result.get("confidence", 0) * 100
-                            st.metric("Confidence Score", f"{confidence:.1f}%")
-                            
-                            # Confidence bar
-                            if confidence >= 80:
-                                st.progress(confidence / 100, text="High Confidence")
-                            elif confidence >= 60:
-                                st.progress(confidence / 100, text="Medium Confidence")
-                            else:
-                                st.progress(confidence / 100, text="Low Confidence")
-                        
-                        with verdict_col3:
-                            risk_score = result.get("risk_score", 0) * 100
-                            st.metric("Risk Score", f"{risk_score:.1f}%")
-                            
-                            if risk_score >= 60:
-                                st.error("🔴 HIGH RISK")
-                            elif risk_score >= 40:
-                                st.warning("🟡 MEDIUM RISK")
-                            else:
-                                st.success("🟢 LOW RISK")
-                        
-                        st.markdown("---")
-                        
-                        # Detailed analysis
-                        detail_col1, detail_col2 = st.columns(2)
-                        
-                        with detail_col1:
-                            st.markdown("#### 🔍 Validation Checks")
-                            validation_checks = result.get("validation_checks", {})
-                            
-                            for check, passed in validation_checks.items():
-                                if isinstance(passed, bool):
-                                    icon = "✅" if passed else "❌"
-                                    st.write(f"{icon} {check.replace('_', ' ').title()}")
-                                else:
-                                    st.write(f"📊 {check.replace('_', ' ').title()}: {passed}")
-                        
-                        with detail_col2:
-                            st.markdown("#### ⚠️ Red Flags Detected")
-                            red_flags = result.get("red_flags", [])
-                            
-                            if red_flags:
-                                for flag in red_flags:
-                                    st.warning(f"🚨 {flag}")
-                            else:
-                                st.success("✅ No red flags detected")
-                        
-                        st.markdown("---")
-                        
-                        # Recommendation
-                        st.markdown("#### 🎯 Recommendation")
-                        recommendation = result.get("recommendation", "No recommendation available")
-                        
-                        if "REJECT" in recommendation:
-                            st.error(f"🔴 {recommendation}")
-                        elif "REVIEW" in recommendation:
-                            st.warning(f"🟡 {recommendation}")
-                        else:
-                            st.success(f"🟢 {recommendation}")
-                        
-                        # Technical details (expandable)
-                        with st.expander("🔧 Technical Details"):
-                            st.json(result)
-                    
-                    else:
-                        st.error(f"❌ API Error: {response.status_code}")
-                        st.error(response.text)
-                
-                except Exception as e:
-                    st.error(f"❌ Analysis Failed: {str(e)}")
-                    st.info("Make sure the API server is running on http://localhost:8000")
-    
-    else:
-        st.info("👆 Upload a document to begin verification")
-        
-        # Show supported document examples
-        st.markdown("---")
-        st.markdown("### 📚 Supported Documents")
-        
-        doc_examples = {
-            "🚗 Driving License": "State-issued driver's licenses",
-            "✈️ Passport": "International passports",
-            "🗳️ Voter ID": "Electoral photo identity cards",
-            "🏦 Bank Statement": "Official bank statements and letters",
-            "🏥 Hospital Bill": "Medical bills and receipts",
-            "⚰️ Death Certificate": "Official death certificates",
-            "📎 Other": "Any other government/official document"
-        }
-        
-        for doc_name, description in doc_examples.items():
-            st.markdown(f"**{doc_name}:** {description}")
-
-# Page 3: Analytics Dashboard
+# Page 2: Analytics Dashboard
 elif "Analytics" in page:
     st.title("📊 Fraud Analytics Dashboard")
     
@@ -794,7 +646,7 @@ elif "Analytics" in page:
         st.error(f"Error: {str(e)}")
         st.info("Make sure API server is running on http://localhost:8000")
 
-# Page 4: Fraud Networks
+# Page 3: Fraud Networks
 else:
     st.title("🕸️ Fraud Network Analysis")
     
@@ -847,7 +699,7 @@ st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center; color: gray;'>
-        ClaimLens AI v2.1 | Multi-Modal Fraud Detection + Generic Document Verification | Built with ❤️ | STABLE BUILD
+        ClaimLens AI v2.2 | Complete Multi-Modal Fraud Detection | Built with ❤️ | All Documents Verified ✅
     </div>
     """,
     unsafe_allow_html=True
