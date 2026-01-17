@@ -55,12 +55,12 @@ class MLFraudScorer:
             logger.error(f"Model file not found: {model_path}")
             raise FileNotFoundError(f"Model file not found: {model_path}")
         
-        logger.info(f"Loading CatBoost model from {model_path}...")
+        logger.info(f"Loading model from {model_path}")
         self.model = CatBoostClassifier()
         self.model.load_model(str(model_path))
         
         self.expected_features = list(self.model.feature_names_)
-        logger.info(f"Model loaded: {len(self.expected_features)} features")
+        logger.info(f"Model loaded with {len(self.expected_features)} features")
         
         # Extract feature importance
         importances = self.model.get_feature_importance()
