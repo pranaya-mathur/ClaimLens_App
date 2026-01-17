@@ -2,8 +2,6 @@
 
 Extracts features from claim narratives using Bhasha-Embed for Hinglish text,
 combined with behavioral and document-based features.
-
-FIXED VERSION - Resolves column name mismatch bug between dataset and model.
 """
 
 import pandas as pd
@@ -22,17 +20,10 @@ class FeatureEngineer:
     
     Generates 145+ features including:
     - Hinglish narrative embeddings (100 dims via PCA)
-    - Time-aware aggregation features (claimant/policy history)
-    - Behavioral patterns (claim frequency, amounts)
+    - Time-aware aggregation features
+    - Behavioral patterns
     - Document presence indicators
-    - Categorical encodings (product, city, subtype)
-    
-    Attributes:
-        embedder: SentenceTransformer model for Hinglish text
-        pca: PCA model for dimensionality reduction
-        pca_dims: Number of embedding dimensions (default: 100)
-        is_fitted: Whether PCA has been fitted
-        expected_features: List of feature names expected by the model (for alignment)
+    - Categorical encodings
     """
 
     def __init__(
@@ -45,8 +36,8 @@ class FeatureEngineer:
         
         Args:
             pca_dims: Number of PCA dimensions for embeddings (default: 100)
-            model_name: HuggingFace model for embeddings (default: Bhasha-Embed)
-            expected_features: List of feature column names from trained model (for alignment)
+            model_name: HuggingFace model for embeddings
+            expected_features: List of feature names from trained model for alignment
         """
         self.pca_dims = pca_dims
         self.model_name = model_name
@@ -78,7 +69,6 @@ class FeatureEngineer:
             "has_discharge",
         ]
         
-        # 🔧 FIXED: Updated to match dataset column names
         self.categorical_features = ["product_type", "city", "claim_subtype"]
         self.categorical_prefixes = ["product", "city", "subtype"]
         
@@ -86,7 +76,7 @@ class FeatureEngineer:
         
         logger.info(f"FeatureEngineer initialized with {pca_dims} PCA dimensions")
         if expected_features:
-            logger.info(f"Feature alignment enabled: {len(expected_features)} expected features")
+            logger.debug(f"Feature alignment enabled: {len(expected_features)} expected features")
 
     def _load_embedder(self):
         """Lazy load embedding model."""
@@ -94,7 +84,7 @@ class FeatureEngineer:
             logger.info(f"Loading {self.model_name} embedding model...")
             try:
                 self.embedder = SentenceTransformer(self.model_name)
-                logger.success("Embedder ready!")
+                logger.info("Embedder ready")
             except Exception as e:
                 logger.error(f"Failed to load embedder: {e}")
                 raise
@@ -107,13 +97,10 @@ class FeatureEngineer:
             
         Returns:
             DataFrame with added time-based features
-            
-        Raises:
-            ValueError: If required columns are missing or invalid
         """
         logger.info("Creating time-aware features...")
         
-        # 🔧 FIXED: Support both 'incident_date' and 'claim_date'
+        # Support both incident_date and claim_date
         date_col = None
         if "incident_date" in df.columns:
             date_col = "incident_date"
@@ -121,7 +108,7 @@ class FeatureEngineer:
             date_col = "claim_date"
             df["incident_date"] = df["claim_date"]
         else:
-            logger.error("Missing 'incident_date' or 'claim_date' column in DataFrame")
+            logger.error("Missing date column in DataFrame")
             raise ValueError(
                 "Missing required column: 'incident_date' or 'claim_date'. "
                 "This column is required for time-aware feature engineering."
@@ -129,38 +116,34 @@ class FeatureEngineer:
         
         try:
             df["incident_date"] = pd.to_datetime(df["incident_date"])
-            logger.debug(f"Converted {date_col} to datetime (min: {df['incident_date'].min()}, max: {df['incident_date'].max()})")
+            logger.debug(f"Converted {date_col} to datetime")
         except Exception as e:
             logger.error(f"Failed to parse {date_col}: {e}")
-            raise ValueError(
-                f"Invalid '{date_col}' format. Expected ISO format (YYYY-MM-DD). "
-                f"Error: {str(e)}"
-            )
+            raise ValueError(f"Invalid '{date_col}' format. Expected ISO format (YYYY-MM-DD).")
         
         null_count = df["incident_date"].isna().sum()
         if null_count > 0:
-            logger.warning(f"Found {null_count} null {date_col} values. Filling with current date.")
+            logger.debug(f"Found {null_count} null {date_col} values - filling with current date")
             df["incident_date"] = df["incident_date"].fillna(pd.Timestamp.now())
         
         try:
             df_sorted = df.sort_values("incident_date").reset_index(drop=True)
-            logger.debug(f"Sorted {len(df_sorted)} claims by incident_date")
             
-            logger.debug("Computing claimant history features...")
+            # Claimant history features
             df_sorted["claimant_claim_count"] = df_sorted.groupby("claimant_id").cumcount() + 1
             df_sorted["claimant_total_claimed"] = df_sorted.groupby("claimant_id")["claim_amount"].cumsum()
             df_sorted["claimant_avg_claim"] = (
                 df_sorted["claimant_total_claimed"] / df_sorted["claimant_claim_count"]
             )
             
-            logger.debug("Computing policy history features...")
+            # Policy history features
             df_sorted["policy_claim_count"] = df_sorted.groupby("policy_id").cumcount() + 1
             df_sorted["policy_total_claimed"] = df_sorted.groupby("policy_id")["claim_amount"].cumsum()
             df_sorted["policy_avg_claim"] = (
                 df_sorted["policy_total_claimed"] / df_sorted["policy_claim_count"]
             )
             
-            logger.debug("Computing time-based features...")
+            # Time-based features
             df_sorted["days_since_last_claim"] = (
                 df_sorted.groupby("claimant_id")["incident_date"].diff().dt.days
             )
@@ -172,7 +155,7 @@ class FeatureEngineer:
             rapid_claim_count = df_sorted["rapid_claims"].sum()
             first_claim_count = df_sorted["is_first_claim"].sum()
             
-            logger.success(
+            logger.info(
                 f"Time features created: {rapid_claim_count} rapid claims, "
                 f"{first_claim_count} first-time claims"
             )
@@ -184,14 +167,7 @@ class FeatureEngineer:
             raise
 
     def create_numeric_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Create numeric features from claim data.
-        
-        Args:
-            df: DataFrame with days_since_policy_start, claim_amount
-            
-        Returns:
-            DataFrame with added numeric features
-        """
+        """Create numeric features from claim data."""
         logger.debug("Creating numeric features...")
         
         try:
@@ -209,14 +185,7 @@ class FeatureEngineer:
             raise
 
     def create_document_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Extract document-based features.
-        
-        Args:
-            df: DataFrame with documents_submitted column
-            
-        Returns:
-            DataFrame with document presence indicators
-        """
+        """Extract document-based features."""
         logger.debug("Creating document features...")
         
         try:
@@ -234,13 +203,7 @@ class FeatureEngineer:
             )
             
             avg_docs = df["num_docs"].mean()
-            fir_count = df["has_fir"].sum()
-            photo_count = df["has_photos"].sum()
-            
-            logger.debug(
-                f"Document features: avg_docs={avg_docs:.1f}, "
-                f"FIRs={fir_count}, photos={photo_count}"
-            )
+            logger.debug(f"Document features: avg_docs={avg_docs:.1f}")
             
             return df
             
@@ -253,7 +216,7 @@ class FeatureEngineer:
         
         Args:
             narratives: List of claim narrative texts
-            batch_size: Batch size for encoding (default: 64)
+            batch_size: Batch size for encoding
             
         Returns:
             PCA-reduced embeddings (n_samples, pca_dims)
@@ -274,30 +237,31 @@ class FeatureEngineer:
             n_samples = embeddings.shape[0]
             embedding_dim = embeddings.shape[1]
             
+            # Handle small sample size
             if n_samples < self.pca_dims:
-                logger.warning(
+                logger.debug(
                     f"Sample size ({n_samples}) < PCA dims ({self.pca_dims}). "
-                    f"Using adjusted embeddings without PCA reduction."
+                    f"Using adjusted embeddings without PCA."
                 )
                 
                 if embedding_dim < self.pca_dims:
                     padding = np.zeros((n_samples, self.pca_dims - embedding_dim))
                     reduced = np.hstack([embeddings, padding])
-                    logger.debug(f"Padded embeddings from {embedding_dim} to {self.pca_dims} dimensions")
+                    logger.debug(f"Padded embeddings to {self.pca_dims} dimensions")
                 else:
                     reduced = embeddings[:, :self.pca_dims]
-                    logger.debug(f"Truncated embeddings from {embedding_dim} to {self.pca_dims} dimensions")
+                    logger.debug(f"Truncated embeddings to {self.pca_dims} dimensions")
                 
-                logger.info(f"Adjusted embeddings shape: {reduced.shape}")
                 return reduced
             
+            # Fit or transform with PCA
             if not self.is_fitted:
                 logger.info(f"Fitting PCA to reduce to {self.pca_dims} dimensions...")
                 
                 effective_dims = min(self.pca_dims, n_samples)
                 
                 if effective_dims < self.pca_dims:
-                    logger.warning(
+                    logger.debug(
                         f"Reducing PCA dims from {self.pca_dims} to {effective_dims} "
                         f"(limited by sample size)"
                     )
@@ -306,7 +270,7 @@ class FeatureEngineer:
                 reduced = self.pca.fit_transform(embeddings)
                 self.is_fitted = True
                 variance_retained = self.pca.explained_variance_ratio_.sum()
-                logger.success(f"PCA fitted: {variance_retained:.2%} variance retained")
+                logger.info(f"PCA fitted: {variance_retained:.2%} variance retained")
                 
                 if reduced.shape[1] < self.pca_dims:
                     padding = np.zeros((reduced.shape[0], self.pca_dims - reduced.shape[1]))
@@ -330,15 +294,8 @@ class FeatureEngineer:
             raise
 
     def _normalize_column_names(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Normalize column names to match trained model expectations.
-        
-        Args:
-            df: DataFrame with feature columns
-            
-        Returns:
-            DataFrame with normalized column names
-        """
-        logger.debug("Normalizing column names to match model format...")
+        """Normalize column names to match trained model expectations."""
+        logger.debug("Normalizing column names...")
         
         id_cols = [c for c in ['claim_id', 'claimant_id', 'policy_id'] if c in df.columns]
         categorical_prefixes = ('product_', 'city_', 'subtype_')
@@ -361,24 +318,14 @@ class FeatureEngineer:
         
         if rename_map:
             df = df.rename(columns=rename_map)
-            logger.debug(
-                f"Renamed {len(rename_map)} columns to model format "
-                f"(preserved categorical dummies and embeddings)"
-            )
+            logger.debug(f"Renamed {len(rename_map)} columns to model format")
         
         return df
 
     def _align_features_with_model(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Align engineered features with model's expected feature schema.
-        
-        Args:
-            df: DataFrame with engineered features
-            
-        Returns:
-            DataFrame aligned with model's expected features
-        """
+        """Align engineered features with model's expected feature schema."""
         if self.expected_features is None:
-            logger.debug("No expected features provided. Skipping feature alignment.")
+            logger.debug("No expected features provided - skipping alignment")
             return df
         
         logger.info("Aligning features with model schema...")
@@ -393,27 +340,18 @@ class FeatureEngineer:
         extra_features = current_features - expected_features
         
         if missing_features:
-            logger.debug(
-                f"Adding {len(missing_features)} missing features with zeros. "
-                f"Sample: {list(missing_features)[:5]}"
-            )
+            logger.debug(f"Adding {len(missing_features)} missing features with zeros")
             for feat in missing_features:
                 df[feat] = 0
         
         if extra_features:
-            logger.debug(
-                f"Removing {len(extra_features)} extra features not in training. "
-                f"Sample: {list(extra_features)[:5]}"
-            )
+            logger.debug(f"Removing {len(extra_features)} extra features")
             df = df.drop(columns=list(extra_features))
         
         final_cols = id_cols + self.expected_features
         df = df[[c for c in final_cols if c in df.columns]]
         
-        logger.success(
-            f"Feature alignment complete: {len(self.expected_features)} features "
-            f"({len(missing_features)} added, {len(extra_features)} removed)"
-        )
+        logger.info(f"Feature alignment complete: {len(self.expected_features)} features")
         
         return df
 
@@ -428,25 +366,24 @@ class FeatureEngineer:
         Args:
             df: Raw claim DataFrame
             narrative_col: Name of narrative text column
-            keep_ids: Whether to KEEP ID columns in output
+            keep_ids: Whether to keep ID columns in output
             
         Returns:
             Feature matrix with embeddings + engineered features
         """
-        logger.info(f"Starting feature engineering pipeline for {len(df)} claims...")
+        logger.info(f"Starting feature engineering for {len(df)} claims...")
         
         try:
-            logger.info("Step 1/5: Creating time-aware aggregation features...")
+            logger.info("Step 1/5: Time-aware aggregation features...")
             df = self.create_time_features(df)
             
-            logger.info("Step 2/5: Creating numeric features...")
+            logger.info("Step 2/5: Numeric features...")
             df = self.create_numeric_features(df)
             
-            logger.info("Step 3/5: Creating document features...")
+            logger.info("Step 3/5: Document features...")
             df = self.create_document_features(df)
             
             logger.info("Step 4/5: One-hot encoding categorical features...")
-            # 🔧 FIXED: Use correct column names and prefixes
             df_cat = pd.get_dummies(
                 df[self.categorical_features], 
                 prefix=self.categorical_prefixes
@@ -474,22 +411,20 @@ class FeatureEngineer:
                 if existing_ids:
                     ids_df = df[existing_ids].copy()
                     feature_df = pd.concat([ids_df, feature_df], axis=1)
-                    logger.info(f"Kept ID columns: {existing_ids}")
-            else:
-                logger.info("ID columns excluded from feature matrix")
+                    logger.debug(f"Kept ID columns: {existing_ids}")
             
             feature_df = self._normalize_column_names(feature_df)
             feature_df = self._align_features_with_model(feature_df)
             
-            logger.success(
-                f"Feature engineering complete! "
-                f"Shape: {feature_df.shape} ({feature_df.shape[0]} rows, {feature_df.shape[1]} features)"
+            logger.info(
+                f"Feature engineering complete: "
+                f"{feature_df.shape[0]} rows, {feature_df.shape[1]} features"
             )
             
             return feature_df
             
         except Exception as e:
-            logger.error(f"Feature engineering pipeline failed: {e}")
+            logger.error(f"Feature engineering failed: {e}")
             raise
 
     def validate_no_leakage(self, feature_df: pd.DataFrame) -> bool:
@@ -499,7 +434,10 @@ class FeatureEngineer:
             feature_df: Engineered feature DataFrame
             
         Returns:
-            True if no leakage detected, raises ValueError otherwise
+            True if no leakage detected
+        
+        Raises:
+            ValueError if leakage detected
         """
         logger.debug("Validating feature leakage...")
         
@@ -512,11 +450,11 @@ class FeatureEngineer:
                 blocked_cols.append(col)
         
         if blocked_cols:
-            logger.error(f"LEAKAGE DETECTED! Forbidden columns: {blocked_cols}")
+            logger.error(f"Leakage detected: {blocked_cols}")
             raise ValueError(
-                f"⚠️ LEAKAGE DETECTED! Found forbidden columns: {blocked_cols}\n"
-                f"These columns may contain label information and must be removed."
+                f"Leakage detected! Forbidden columns: {blocked_cols}. "
+                f"These columns may contain label information."
             )
         
-        logger.success("✅ Leakage validation passed: No forbidden columns found.")
+        logger.debug("Leakage validation passed")
         return True
