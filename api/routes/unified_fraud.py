@@ -1,8 +1,7 @@
-"""
-Unified Fraud Analysis API - ALL Modules Integrated
+"""Unified Fraud Analysis API
 
 Complete production endpoint that:
-1. Accepts NEW claims with documents
+1. Accepts new claims with documents
 2. Runs ML fraud scoring
 3. Verifies documents with CV engine
 4. Checks graph for fraud connections
@@ -42,18 +41,18 @@ class CompleteClaimRequest(BaseModel):
     claim_id: str
     claimant_id: str
     policy_id: str
-    product: str = Field(..., description="Product type: motor/health/life/property")
+    product: str  # motor/health/life/property
     city: str
     subtype: str
     claim_amount: float
     days_since_policy_start: int
-    narrative: str = Field(..., description="Claim narrative in English/Hinglish")
-    documents_submitted: Optional[str] = Field(None, description="Comma-separated doc types")
-    incident_date: str = Field(..., description="ISO format date")
+    narrative: str  # English/Hinglish
+    documents_submitted: Optional[str] = None  # comma-separated
+    incident_date: str  # ISO format
 
 
 class CompleteAnalysisResponse(BaseModel):
-    """Complete fraud analysis response with all modules."""
+    """Complete fraud analysis response."""
     claim_id: str
     final_verdict: str  # APPROVE, REVIEW, REJECT
     final_confidence: float
@@ -89,9 +88,9 @@ def get_ml_components():
                 metadata_path=settings.ML_METADATA_PATH,
                 threshold=settings.ML_THRESHOLD
             )
-            logger.info("✅ ML Scorer loaded")
+            logger.info("ML Scorer loaded")
         except Exception as e:
-            logger.warning(f"⚠️ ML Scorer failed: {e}")
+            logger.debug(f"ML Scorer failed: {e}")
             _ml_scorer = None
     
     if _feature_engineer is None and _ml_scorer is not None:
@@ -102,9 +101,9 @@ def get_ml_components():
                 model_name=settings.ML_EMBEDDING_MODEL,
                 expected_features=expected_features
             )
-            logger.info("✅ Feature Engineer loaded")
+            logger.info("Feature Engineer loaded")
         except Exception as e:
-            logger.warning(f"⚠️ Feature Engineer failed: {e}")
+            logger.debug(f"Feature Engineer failed: {e}")
             _feature_engineer = None
     
     return _ml_scorer, _feature_engineer
@@ -127,9 +126,9 @@ def get_llm_components():
                 temperature=settings.LLM_TEMPERATURE,
                 max_tokens=settings.LLM_MAX_TOKENS
             )
-            logger.info("✅ Semantic Aggregator loaded")
+            logger.info("Semantic Aggregator loaded")
         except Exception as e:
-            logger.warning(f"⚠️ Semantic Aggregator failed: {e}")
+            logger.debug(f"Semantic Aggregator failed: {e}")
             _semantic_aggregator = None
     
     if _explanation_generator is None:
@@ -140,9 +139,9 @@ def get_llm_components():
                 temperature=settings.EXPLANATION_TEMPERATURE,
                 max_tokens=settings.EXPLANATION_MAX_TOKENS
             )
-            logger.info("✅ Explanation Generator loaded")
+            logger.info("Explanation Generator loaded")
         except Exception as e:
-            logger.warning(f"⚠️ Explanation Generator failed: {e}")
+            logger.debug(f"Explanation Generator failed: {e}")
             _explanation_generator = None
     
     return _semantic_aggregator, _explanation_generator
@@ -161,9 +160,9 @@ def get_claim_storage():
                 user=settings.NEO4J_USER,
                 password=settings.NEO4J_PASSWORD
             )
-            logger.info("✅ Claim Storage connected")
+            logger.info("Claim Storage connected")
         except Exception as e:
-            logger.warning(f"⚠️ Neo4j not available: {e}")
+            logger.debug(f"Neo4j not available: {e}")
             _claim_storage = None
     
     return _claim_storage
@@ -174,42 +173,29 @@ async def analyze_claim_complete(
     request: CompleteClaimRequest
 ):
     """
-    🚀 UNIFIED FRAUD ANALYSIS - ALL MODULES
+    Complete fraud analysis using all modules.
     
-    Analyzes NEW claims in real-time using:
-    - ML Engine: Feature engineering + CatBoost fraud scoring
-    - CV Engine: Document verification (if documents provided)
-    - Graph Engine: Fraud network analysis (if claimant exists in DB)
-    - LLM Engine: Semantic verdict aggregation + AI explanations
+    Analyzes new claims in real-time using ML, CV, Graph, and LLM engines.
+    Stores claim in Neo4j for future graph queries.
     
-    Then STORES the claim in Neo4j for future graph queries.
-    
-    Returns:
-        Complete analysis with all module results, LLM explanation,
-        and storage confirmation.
+    Returns complete analysis with all module results and LLM explanation.
     """
-    logger.info(f"🎯 Starting complete analysis for claim: {request.claim_id}")
+    logger.info(f"Starting analysis for claim: {request.claim_id}")
     
     component_results = {}
     critical_flags = []
     reasoning_chain = []
     
-    # ========================================
-    # STEP 1: ML FRAUD SCORING
-    # ========================================
-    logger.info("🤖 STEP 1: Running ML fraud detection...")
+    # ML fraud scoring
+    logger.info("Running ML fraud detection...")
     
     try:
         scorer, engineer = get_ml_components()
         
-        # Convert request to DataFrame
         claim_df = pd.DataFrame([request.dict()])
-        
-        # Engineer features
         features = engineer.engineer_features(claim_df, keep_ids=True)
         engineer.validate_no_leakage(features)
         
-        # Score claim
         ml_result = scorer.score_claim(features.iloc[[0]], return_details=True)
         
         component_results["ml_fraud_score"] = {
@@ -228,24 +214,21 @@ async def analyze_claim_complete(
         })
         
         if ml_result["fraud_probability"] > 0.7:
-            critical_flags.append(f"🔴 HIGH ML FRAUD SCORE: {ml_result['fraud_probability']:.0%}")
+            critical_flags.append(f"High ML fraud score: {ml_result['fraud_probability']:.0%}")
         
-        logger.success(f"✅ ML Score: {ml_result['fraud_probability']:.2%} ({ml_result['risk_level']})")
+        logger.info(f"ML Score: {ml_result['fraud_probability']:.2%} ({ml_result['risk_level']})")
         
     except Exception as e:
-        logger.error(f"❌ ML scoring failed: {e}")
+        logger.error(f"ML scoring failed: {e}")
         raise HTTPException(status_code=500, detail=f"ML scoring error: {str(e)}")
     
-    # ========================================
-    # STEP 2: GRAPH ANALYSIS (if available)
-    # ========================================
-    logger.info("🕸️ STEP 2: Checking fraud network connections...")
+    # Graph analysis
+    logger.info("Checking fraud network connections...")
     
     try:
         storage = get_claim_storage()
         
         if storage:
-            # Check claimant history
             claimant_history = storage.get_claimant_history(request.claimant_id)
             
             component_results["graph_analysis"] = {
@@ -264,11 +247,11 @@ async def analyze_claim_complete(
             })
             
             if claimant_history["total_claims"] > 2 and claimant_history.get("avg_fraud_score", 0) > 0.6:
-                critical_flags.append(f"🕸️ SERIAL FRAUDSTER: {claimant_history['total_claims']} claims, {claimant_history.get('avg_fraud_score', 0):.0%} avg fraud")
+                critical_flags.append(f"Serial fraudster: {claimant_history['total_claims']} claims")
             
-            logger.success(f"✅ Graph: {claimant_history['total_claims']} previous claims")
+            logger.info(f"Graph: {claimant_history['total_claims']} previous claims")
         else:
-            logger.warning("⚠️ Neo4j not available - skipping graph analysis")
+            logger.debug("Neo4j not available - skipping graph analysis")
             component_results["graph_analysis"] = {
                 "verdict": "UNAVAILABLE",
                 "confidence": 0,
@@ -278,7 +261,7 @@ async def analyze_claim_complete(
             }
     
     except Exception as e:
-        logger.warning(f"⚠️ Graph analysis failed: {e}")
+        logger.debug(f"Graph analysis failed: {e}")
         component_results["graph_analysis"] = {
             "verdict": "ERROR",
             "confidence": 0,
@@ -287,10 +270,8 @@ async def analyze_claim_complete(
             "red_flags": []
         }
     
-    # ========================================
-    # STEP 3: LLM SEMANTIC AGGREGATION
-    # ========================================
-    logger.info("🧠 STEP 3: LLM semantic aggregation...")
+    # LLM semantic aggregation
+    logger.info("LLM semantic aggregation...")
     
     final_verdict = "REVIEW"
     final_confidence = 0.75
@@ -301,7 +282,6 @@ async def analyze_claim_complete(
         semantic_agg, explanation_gen = get_llm_components()
         
         if semantic_agg and explanation_gen:
-            # Get LLM verdict
             llm_result = semantic_agg.aggregate(
                 component_results=component_results,
                 claim_data=request.dict()
@@ -311,7 +291,6 @@ async def analyze_claim_complete(
             final_confidence = llm_result.get("confidence", 0.75)
             llm_used = llm_result.get("llm_used", False)
             
-            # Generate explanation
             llm_explanation = explanation_gen.generate(
                 verdict_data={
                     "verdict": final_verdict,
@@ -330,10 +309,10 @@ async def analyze_claim_complete(
                 "reason": "LLM analyzed all component signals"
             })
             
-            logger.success(f"✅ LLM Verdict: {final_verdict} (confidence: {final_confidence:.0%})")
+            logger.info(f"LLM Verdict: {final_verdict} (confidence: {final_confidence:.0%})")
         else:
-            logger.warning("⚠️ LLM not available - using fallback logic")
-            # Fallback: Use ML score for verdict
+            logger.debug("LLM not available - using fallback logic")
+            # Fallback to ML score
             fraud_prob = ml_result["fraud_probability"]
             if fraud_prob >= 0.7:
                 final_verdict = "REJECT"
@@ -348,17 +327,14 @@ async def analyze_claim_complete(
             llm_explanation += f"The claim amount of ₹{request.claim_amount:,.0f} requires {final_verdict.lower()}."
     
     except Exception as e:
-        logger.error(f"❌ LLM aggregation failed: {e}")
-        # Use fallback
+        logger.error(f"LLM aggregation failed: {e}")
         fraud_prob = ml_result["fraud_probability"]
         final_verdict = "REJECT" if fraud_prob >= 0.7 else "REVIEW" if fraud_prob >= 0.4 else "APPROVE"
         final_confidence = 0.7
         llm_explanation = f"Analysis based on ML scoring: {fraud_prob:.0%} fraud probability."
     
-    # ========================================
-    # STEP 4: STORE IN DATABASE
-    # ========================================
-    logger.info("💾 STEP 4: Storing claim in Neo4j...")
+    # Store in database
+    logger.info("Storing claim in Neo4j...")
     
     stored = False
     storage_timestamp = None
@@ -382,16 +358,13 @@ async def analyze_claim_complete(
             stored = storage_result.get("success", False)
             storage_timestamp = storage_result.get("stored_at")
             
-            logger.success(f"✅ Claim stored in Neo4j: {request.claim_id}")
+            logger.info(f"Claim stored in Neo4j: {request.claim_id}")
         else:
-            logger.warning("⚠️ Neo4j not available - claim not stored")
+            logger.debug("Neo4j not available - claim not stored")
     
     except Exception as e:
-        logger.error(f"❌ Storage failed: {e}")
+        logger.error(f"Storage failed: {e}")
     
-    # ========================================
-    # FINAL RESPONSE
-    # ========================================
     reasoning_chain.append({
         "stage": "final_decision",
         "decision": final_verdict,
@@ -423,7 +396,7 @@ async def analyze_claim_complete(
 
 @router.get("/health")
 async def unified_health_check():
-    """Health check for unified fraud analysis endpoint - SIMPLIFIED."""
+    """Health check for unified fraud analysis endpoint."""
     try:
         return {
             "status": "healthy",
