@@ -20,18 +20,8 @@ class MLFraudScorer:
     """CatBoost-based fraud scorer for insurance claims.
     
     Trained on 50K Hinglish claims with 84.8% AUC and 42.8% F1 score.
-    Features include:
-    - 100-dim Bhasha-Embed narrative embeddings (PCA-reduced)
-    - Time-aware behavioral patterns
-    - Document presence indicators
-    - Categorical encodings
-    
-    Attributes:
-        model: Trained CatBoostClassifier
-        feature_importance: DataFrame with feature rankings
-        metadata: Model training metrics and config
-        threshold: Decision threshold for fraud classification
-        expected_features: List of feature names expected by model
+    Uses 145 features including narrative embeddings, behavioral patterns,
+    and document indicators.
     """
 
     def __init__(
@@ -59,11 +49,7 @@ class MLFraudScorer:
             self.load_metadata(metadata_path)
 
     def load_model(self, model_path: Union[str, Path]):
-        """Load trained CatBoost model.
-        
-        Args:
-            model_path: Path to .cbm model file
-        """
+        """Load trained CatBoost model."""
         model_path = Path(model_path)
         if not model_path.exists():
             logger.error(f"Model file not found: {model_path}")
@@ -73,10 +59,8 @@ class MLFraudScorer:
         self.model = CatBoostClassifier()
         self.model.load_model(str(model_path))
         
-        # Extract and store expected feature names
         self.expected_features = list(self.model.feature_names_)
-        logger.info(f"Model expects {len(self.expected_features)} features")
-        logger.debug(f"First 10 expected features: {self.expected_features[:10]}")
+        logger.info(f"Model loaded: {len(self.expected_features)} features")
         
         # Extract feature importance
         importances = self.model.get_feature_importance()
@@ -84,46 +68,28 @@ class MLFraudScorer:
             "feature": self.expected_features,
             "importance": importances,
         }).sort_values("importance", ascending=False)
-        
-        logger.success(f"✅ Model loaded! Features: {len(self.expected_features)}")
 
     def load_metadata(self, metadata_path: Union[str, Path]):
-        """Load model training metadata.
-        
-        Args:
-            metadata_path: Path to metadata JSON file
-        """
+        """Load model training metadata."""
         metadata_path = Path(metadata_path)
         if not metadata_path.exists():
-            logger.warning(f"Metadata file not found: {metadata_path}. Skipping metadata load.")
+            logger.debug(f"Metadata file not found: {metadata_path}")
             return
         
         with open(metadata_path, "r") as f:
             self.metadata = json.load(f)
         
-        logger.info(f"✅ Metadata loaded: AUC={self.metadata.get('auc_roc', 'N/A')}")
+        logger.debug(f"Metadata loaded: AUC={self.metadata.get('auc_roc', 'N/A')}")
 
     def _align_features(self, features: pd.DataFrame) -> pd.DataFrame:
         """Align input features with model's expected feature schema.
         
-        CRITICAL: Ensures reliable predictions by handling missing/extra features.
-        - Adds missing features with zeros (for unseen categories)
-        - Removes extra features not in training
-        - Preserves correct column order
-        
-        Args:
-            features: Feature DataFrame from feature engineering
-            
-        Returns:
-            Aligned DataFrame with exact features expected by model
+        Handles missing/extra features to ensure reliable predictions.
+        Adds missing features with zeros and removes extras.
         """
         if self.expected_features is None:
-            logger.error("Model not loaded! Cannot align features.")
+            logger.error("Model not loaded - cannot align features")
             raise ValueError("Model must be loaded before feature alignment")
-        
-        # 🔥 DEBUGGING: Log incoming features
-        logger.warning(f"🔍 BEFORE ALIGNMENT: Received {len(features.columns)} features")
-        logger.warning(f"🔍 First 20 received features: {list(features.columns)[:20]}")
         
         current_features = set(features.columns)
         expected_features_set = set(self.expected_features)
@@ -131,26 +97,16 @@ class MLFraudScorer:
         missing_features = expected_features_set - current_features
         extra_features = current_features - expected_features_set
         
-        # 🔥 CRITICAL DEBUG
         if missing_features:
-            logger.warning(
-                f"⚠️ MISSING {len(missing_features)} features! Adding zeros. "
-                f"Sample: {list(missing_features)[:10]}"
-            )
-            # Add missing columns with zeros
+            logger.debug(f"Adding {len(missing_features)} missing features with zeros")
             for feat in missing_features:
                 features[feat] = 0
         
         if extra_features:
-            logger.warning(
-                f"⚠️ EXTRA {len(extra_features)} features! Removing. "
-                f"Sample: {list(extra_features)[:10]}"
-            )
+            logger.debug(f"Removing {len(extra_features)} extra features")
         
-        # Reorder columns to match training (only keep expected features)
+        # Reorder columns to match training
         features = features[self.expected_features]
-        
-        logger.warning(f"✅ AFTER ALIGNMENT: Now have {len(features.columns)} features (expected {len(self.expected_features)})")
         
         return features
 
@@ -164,33 +120,19 @@ class MLFraudScorer:
             Array of fraud probabilities (0-1)
         """
         if self.model is None:
-            logger.error("Model not loaded!")
+            logger.error("Model not loaded")
             raise ValueError("Model not loaded! Call load_model() first.")
         
         # Align features with model expectations
         features = self._align_features(features)
         
-        # 🔥 DEBUG: Check feature values before prediction
-        logger.warning(f"🔍 Feature stats: mean={features.mean().mean():.3f}, std={features.std().mean():.3f}")
-        logger.warning(f"🔍 Feature sample (first 5 cols): {features.iloc[0, :5].to_dict()}")
-        
         # Predict probabilities (return fraud class probability)
         proba = self.model.predict_proba(features)[:, 1]
-        
-        # 🔥 DEBUG: Log prediction output
-        logger.warning(f"💥 PREDICTION OUTPUT: fraud_proba = {proba[0]:.6f}")
         
         return proba
 
     def predict(self, features: pd.DataFrame) -> np.ndarray:
-        """Predict fraud labels based on threshold.
-        
-        Args:
-            features: Feature DataFrame
-            
-        Returns:
-            Binary fraud predictions (0=legitimate, 1=fraud)
-        """
+        """Predict fraud labels based on threshold."""
         proba = self.predict_proba(features)
         return (proba >= self.threshold).astype(int)
 
@@ -249,28 +191,18 @@ class MLFraudScorer:
         features: pd.DataFrame,
         return_dataframe: bool = True,
     ) -> Union[pd.DataFrame, np.ndarray]:
-        """Score multiple claims for fraud risk.
-        
-        Args:
-            features: Feature DataFrame (multiple rows)
-            return_dataframe: Whether to return DataFrame with scores
-            
-        Returns:
-            DataFrame with fraud scores or numpy array of probabilities
-        """
+        """Score multiple claims for fraud risk."""
         fraud_probs = self.predict_proba(features)
         fraud_labels = (fraud_probs >= self.threshold).astype(int)
         
         if not return_dataframe:
             return fraud_probs
         
-        # Create result DataFrame
         result_df = pd.DataFrame({
             "fraud_probability": fraud_probs,
             "fraud_prediction": fraud_labels,
         })
         
-        # Add risk level
         result_df["risk_level"] = pd.cut(
             fraud_probs,
             bins=[0, 0.3, 0.5, 0.7, 1.0],
@@ -285,16 +217,7 @@ class MLFraudScorer:
         y_proba: np.ndarray,
         thresholds: Optional[np.ndarray] = None,
     ) -> pd.DataFrame:
-        """Analyze model performance across different thresholds.
-        
-        Args:
-            y_true: True fraud labels
-            y_proba: Predicted fraud probabilities
-            thresholds: Thresholds to evaluate (default: [0.3, 0.4, 0.5, 0.6, 0.7])
-            
-        Returns:
-            DataFrame with metrics for each threshold
-        """
+        """Analyze model performance across different thresholds."""
         from sklearn.metrics import precision_score, recall_score, f1_score
         
         if thresholds is None:
@@ -324,14 +247,7 @@ class MLFraudScorer:
         return pd.DataFrame(results)
 
     def get_feature_importance(self, top_n: int = 20) -> pd.DataFrame:
-        """Get top N most important features.
-        
-        Args:
-            top_n: Number of top features to return
-            
-        Returns:
-            DataFrame with feature names and importance scores
-        """
+        """Get top N most important features."""
         if self.feature_importance is None:
             raise ValueError("Feature importance not available. Load model first.")
         
@@ -342,21 +258,12 @@ class MLFraudScorer:
         features: pd.DataFrame,
         top_n: int = 10,
     ) -> Dict[str, any]:
-        """Explain fraud prediction for a single claim.
-        
-        Args:
-            features: Feature DataFrame (single row)
-            top_n: Number of top contributing features to show
-            
-        Returns:
-            Explanation dict with prediction and top features
-        """
+        """Explain fraud prediction for a single claim."""
         if len(features) != 1:
             raise ValueError("explain_prediction expects a single-row DataFrame")
         
         fraud_prob = self.predict_proba(features)[0]
         
-        # Get top features and their values
         top_features = self.feature_importance.head(top_n)
         feature_values = features.iloc[0]
         
@@ -379,23 +286,15 @@ class MLFraudScorer:
         }
 
     def update_threshold(self, new_threshold: float):
-        """Update fraud classification threshold.
-        
-        Args:
-            new_threshold: New threshold value (0-1)
-        """
+        """Update fraud classification threshold."""
         if not 0 <= new_threshold <= 1:
             raise ValueError("Threshold must be between 0 and 1")
         
         self.threshold = new_threshold
-        logger.info(f"✅ Threshold updated to {new_threshold}")
+        logger.info(f"Threshold updated to {new_threshold}")
 
     def summary(self) -> Dict[str, any]:
-        """Get model summary information.
-        
-        Returns:
-            Dict with model statistics and performance
-        """
+        """Get model summary information."""
         if self.model is None:
             return {"status": "Model not loaded"}
         
