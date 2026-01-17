@@ -1,46 +1,29 @@
 # ClaimLens AI
 
-**AI-Powered Insurance Fraud Detection**
-
-Multi-modal fraud detection combining Machine Learning, Computer Vision, Graph Analytics, and LLMs for insurance claim analysis.
+AI-powered insurance fraud detection using ML, computer vision, graph analytics, and LLMs.
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
----
+## What is this?
 
-## Overview
+ClaimLens analyzes insurance claims to detect fraud using multiple AI techniques:
 
-ClaimLens AI analyzes insurance claims using multiple AI techniques to detect fraud:
+- **ML Engine**: CatBoost classifier with 145 features
+- **Computer Vision**: Document forgery detection (PAN, Aadhaar, licenses, etc.)
+- **Graph Analytics**: Fraud network detection using Neo4j
+- **LLM**: Natural language explanations powered by Groq
 
-- **Machine Learning**: CatBoost model with 145 features for fraud scoring
-- **Computer Vision**: Document forgery detection (PAN, Aadhaar, generic documents)
-- **Graph Analytics**: Network fraud ring detection using Neo4j
-- **LLM Integration**: Natural language explanations via Groq's Llama-3.3-70B
-
-### Key Features
-
-- Multi-modal analysis combining 4 AI engines
-- Explainable AI with human-readable explanations
-- Real-time fraud probability predictions
-- Document verification with OCR (PAN/Aadhaar/licenses/passports)
-- Generic document detector for various document types
-- Fraud network detection through graph relationships
-- Hinglish language support
-- RESTful APIs with rate limiting
-
----
+The system can process claims in English and Hinglish (Hindi-English mix).
 
 ## Quick Start
 
-### Prerequisites
-
+**Requirements:**
 - Python 3.10+
-- Docker (for Neo4j)
-- Groq API Key ([get free key](https://console.groq.com/))
+- Docker (optional, for Neo4j)
+- Groq API key (free at console.groq.com)
 
-### Installation
-
+**Setup:**
 ```bash
 git clone https://github.com/pranaya-mathur/ClaimLens_App.git
 cd ClaimLens_App
@@ -51,241 +34,150 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# Edit .env and add your GROQ_API_KEY
+# Add your GROQ_API_KEY to .env
 ```
 
-### Running the App
-
+**Run:**
 ```bash
-# Terminal 1: Backend
-uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+# Start backend
+uvicorn api.main:app --reload
 
-# Terminal 2: Frontend
+# Start frontend (new terminal)
 streamlit run frontend/streamlit_app.py
 
-# Optional: Neo4j
+# Optional: Neo4j for graph features
 docker-compose up neo4j -d
 ```
 
-Check installation:
+Visit http://localhost:8501 for the UI or http://localhost:8000/docs for API docs.
+
+## How it Works
+
+The system processes claims through four engines:
+
+1. **ML Engine** extracts 145 features (text embeddings, behavioral patterns, document flags) and runs CatBoost classification
+2. **CV Engine** verifies document authenticity using ResNet50 + Error Level Analysis
+3. **Graph Engine** checks for fraud networks (shared documents, suspicious connections)
+4. **LLM Engine** aggregates results and generates explanations
+
+All results are combined using semantic aggregation to produce a final verdict.
+
+## API Examples
+
+**Score a claim:**
 ```bash
-python scripts/diagnose_app.py
-```
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                   Streamlit Frontend                     │
-└────────────────────────┬────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                   FastAPI Backend                        │
-└──┬────────────┬────────────┬────────────┬───────────────┘
-   │             │            │            │
-   ▼             ▼            ▼            ▼
-┌────────┐  ┌─────────┐  ┌──────────┐  ┌──────────┐
-│ML      │  │CV       │  │Graph     │  │LLM       │
-│Engine  │  │Engine   │  │Engine    │  │Engine    │
-└────────┘  └─────────┘  └──────────┘  └──────────┘
-   │             │            │            │
-   ▼             ▼            ▼            ▼
-CatBoost      YOLO/OCR      Neo4j      Groq API
-              +ResNet50
-```
-
-### Tech Stack
-
-| Component | Technology |
-|-----------|-----------|
-| Backend | FastAPI |
-| Frontend | Streamlit |
-| ML Model | CatBoost |
-| CV Models | YOLO, ResNet50, Tesseract |
-| Graph DB | Neo4j |
-| LLM | Groq Llama-3.3-70B |
-| Orchestration | LangChain |
-
----
-
-## API Endpoints
-
-### Main Endpoints
-
-```bash
-# Complete analysis (all modules)
-POST /api/unified/analyze-complete
-
-# ML scoring
 POST /api/ml/score
-POST /api/ml/score/detailed
-
-# Document verification
-POST /api/documents/verify-pan
-POST /api/documents/verify-aadhaar
-POST /api/documents/verify-document  # generic documents
-
-# LLM explanations
-POST /api/llm/explain
-GET  /api/llm/health
-
-# Graph analysis
-POST /api/fraud/score
-GET  /api/fraud/rings
-GET  /api/fraud/serial-fraudsters
-
-# Health
-GET  /health/liveness
-GET  /health/readiness
+{
+  "claim_id": "CLM001",
+  "narrative": "Car accident on highway",
+  "claim_amount": 50000,
+  "product": "motor",
+  ...
+}
 ```
 
-Interactive docs: http://localhost:8000/docs
+**Verify a document:**
+```bash
+POST /api/documents/verify-pan
+(upload PAN card image)
+```
 
----
+**Complete analysis:**
+```bash
+POST /api/unified/analyze-complete
+(runs all engines)
+```
+
+See `/docs` folder for detailed API documentation.
 
 ## Features
 
-### 1. Multi-Modal Fraud Analysis
-Analyzes claims using ML, CV, Graph, and LLM engines simultaneously.
+- Multi-modal fraud detection
+- Document forgery detection with OCR
+- Fraud network visualization
+- AI-generated explanations (technical & customer-friendly)
+- Real-time processing (<2s per claim with caching)
+- Hinglish support
 
-### 2. Document Verification
-Upload PAN/Aadhaar cards for forgery detection with OCR.
+## Project Structure
 
-### 3. Generic Document Verification
-Supports driving licenses, passports, voter IDs, bank statements, hospital bills, death certificates.
-
-### 4. AI Explanations
-Human-readable explanations in technical and customer-friendly formats.
-
-### 5. Network Detection
-Visualizes fraud rings through shared documents and connections.
-
-### 6. Analytics Dashboard
-Real-time monitoring of fraud trends and risk distributions.
-
----
-
-## Documentation
-
-Available in `/docs`:
-
-- [Setup Guide](docs/SETUP.md) - Installation details
-- [API Documentation](docs/API.md) - Endpoint reference
-- [Architecture](docs/ARCHITECTURE.md) - System design
-- [Document Verification](docs/guides/document_verification.md) - CV engine
-- [Deployment](docs/DEPLOYMENT.md) - Production setup
-- [CHANGELOG](CHANGELOG.md) - Version history
-- [CONTRIBUTING](CONTRIBUTING.md) - How to contribute
-
----
-
-## Testing
-
-```bash
-pytest tests/
-pytest tests/test_ml_engine.py -v
-pytest --cov=src tests/
 ```
-
----
+ClaimLens_App/
+├── api/              # FastAPI backend
+│   ├── routes/       # API endpoints
+│   └── schemas/      # Pydantic models
+├── src/              # Core engines
+│   ├── ml_engine/    # CatBoost fraud scoring
+│   ├── cv_engine/    # Document verification
+│   ├── llm_engine/   # LLM explanations
+│   └── fraud_engine/ # Graph analytics
+├── frontend/         # Streamlit UI
+├── models/           # Trained models
+├── docs/             # Documentation
+└── tests/            # Test suite
+```
 
 ## Configuration
 
-Key environment variables:
+Key environment variables (see `.env.example`):
 
 ```bash
-GROQ_API_KEY=your_groq_api_key
-EXPLANATION_MODEL=llama-3.3-70b-versatile
-
+GROQ_API_KEY=your_key_here
 NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=claimlens123
+NEO4J_PASSWORD=your_password
 
 ENABLE_LLM_EXPLANATIONS=true
-ENABLE_SEMANTIC_AGGREGATION=true
+ML_THRESHOLD=0.5
 ```
-
----
 
 ## Performance
 
-- ML Inference: <100ms per claim
-- Document Analysis: <2s per image
-- LLM Explanations: <3s
-- Graph Queries: <500ms
-- API Throughput: 100 req/min (rate limited)
+Based on testing with synthetic claims:
 
----
+- ML inference: ~80ms
+- Document analysis: 1-2s
+- LLM explanations: 2-3s
+- End-to-end (cached): <500ms
 
-## Roadmap
-
-### v2.2.0 (In Progress)
-- [ ] Batch processing API
-- [ ] PDF document support
-- [ ] Multi-language support (Hindi, Tamil, Telugu)
-- [ ] Enhanced graph visualizations
-
-### v3.0.0 (Future)
-- [ ] LangGraph-based agentic architecture
-- [ ] Real-time web intelligence integration
-- [ ] Time-series fraud prediction
-- [ ] Mobile app (React Native)
-
-See [CHANGELOG.md](CHANGELOG.md) for details.
-
----
+Rate limited to 100 requests/min by default.
 
 ## Known Issues
 
-- Neo4j connection sometimes fails on first startup (restart fixes it)
-- Large PDF files (>10MB) may timeout on document verification
-- Hinglish embeddings work best with mixed English-Hindi text
+- Neo4j sometimes needs a restart on first launch
+- Large PDFs (>10MB) may timeout
+- Hinglish embeddings need mixed English-Hindi text to work well
+- Generic document detector accuracy varies by document quality
 
-See [Issues](https://github.com/pranaya-mathur/ClaimLens_App/issues) for tracking.
+See [Issues](https://github.com/pranaya-mathur/ClaimLens_App/issues) for more.
 
----
+## TODO
+
+- [ ] Add batch processing endpoint
+- [ ] Support PDF documents
+- [ ] Add more languages (Hindi, Tamil, Telugu)
+- [ ] Improve graph visualizations
+- [ ] Add model retraining pipeline
+
+See full roadmap in [CHANGELOG.md](CHANGELOG.md).
 
 ## Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
-
+PRs welcome! Please:
 1. Fork the repo
-2. Create feature branch (`git checkout -b feature/NewFeature`)
-3. Commit changes (`git commit -m 'Add NewFeature'`)
-4. Push branch (`git push origin feature/NewFeature`)
-5. Open Pull Request
+2. Create a feature branch
+3. Add tests for new features
+4. Submit a PR
 
----
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file.
+MIT - see [LICENSE](LICENSE)
 
----
+## Contact
 
-## Author
-
-**Pranay Mathur**
+Pranay Mathur
 - GitHub: [@pranaya-mathur](https://github.com/pranaya-mathur)
 - Email: pranaya.mathur@yahoo.com
 
----
-
-## Acknowledgments
-
-Thanks to Groq, LangChain, Neo4j, and CatBoost teams for their excellent tools.
-
----
-
-## Support
-
-- Email: pranaya.mathur@yahoo.com
-- Issues: [GitHub Issues](https://github.com/pranaya-mathur/ClaimLens_App/issues)
-- Discussions: [GitHub Discussions](https://github.com/pranaya-mathur/ClaimLens_App/discussions)
-
----
-
-*Built for the insurance industry*
+Built with help from Groq, LangChain, Neo4j, and CatBoost.
