@@ -18,13 +18,15 @@ Usage:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
-from typing import Dict, Union
+from typing import Dict, Union, List
 import torch
-from PIL import Image
+import numpy as np
+from PIL import Image, ImageStat
 from torchvision import transforms
 from loguru import logger
+import cv2
 
 from .forgery_models import AadhaarForgeryDetectorCNN
 
@@ -45,6 +47,8 @@ class AadhaarVerificationResult:
     authentic_probability: float
     forged_probability: float
     threshold: float
+    quality_score: float = 1.0  # 🆕 NEW: Image quality score (0-1)
+    quality_warnings: List[str] = field(default_factory=list)  # 🆕 NEW: Quality issues
     
     def to_dict(self) -> Dict:
         """Convert result to dictionary"""
@@ -88,7 +92,8 @@ class AadhaarForgeryDetector:
         "architecture": "ResNet50",
         "input_size": (224, 224),
         "num_classes": 2,
-        "threshold": 0.5,  # Balanced threshold
+        "threshold": 0.5,  # Balanced threshold for high-quality images
+        "threshold_low_quality": 0.3,  # 🆕 NEW: Lenient threshold for poor quality
         "normalization": {
             "mean": [0.485, 0.456, 0.406],  # ImageNet stats
             "std": [0.229, 0.224, 0.225]
@@ -107,7 +112,8 @@ class AadhaarForgeryDetector:
         self,
         model_path: PathLike = DEFAULT_MODEL_PATH,
         device: str = "cuda",
-        threshold: float = None
+        threshold: float = None,
+        adaptive_threshold: bool = True  # 🆕 NEW: Enable adaptive thresholding
     ) -> None:
         """
         Initialize Aadhaar forgery detector.
@@ -116,10 +122,12 @@ class AadhaarForgeryDetector:
             model_path: Path to trained model weights (.pth file)
             device: Device to run inference on ("cuda" or "cpu")
             threshold: Custom threshold (default: 0.5 for balanced accuracy)
+            adaptive_threshold: Adjust threshold based on image quality
         """
         self.model_path = Path(model_path)
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
         self.threshold = threshold or self.MODEL_CONFIG["threshold"]
+        self.adaptive_threshold = adaptive_threshold
         self.input_size = self.MODEL_CONFIG["input_size"]
         
         logger.info(f"Initializing Aadhaar detector on {self.device}")
@@ -138,11 +146,12 @@ class AadhaarForgeryDetector:
         logger.success(
             f"Aadhaar detector ready | "
             f"Threshold: {self.threshold} | "
+            f"Adaptive: {self.adaptive_threshold} | "
             f"Accuracy: {self.MODEL_CONFIG['performance']['validation_accuracy']:.2%}"
         )
     
     def _load_model(self) -> None:
-        """Load trained model weights"""
+        """Load trained model weights with automatic key remapping"""
         if not self.model_path.exists():
             raise FileNotFoundError(
                 f"Model file not found: {self.model_path}\n"
@@ -162,23 +171,33 @@ class AadhaarForgeryDetector:
                 weights_only=False
             )
             
-            # Handle different checkpoint formats
+            # Extract state dict from checkpoint
             if isinstance(checkpoint, dict):
                 if 'model_state_dict' in checkpoint:
-                    self.model.load_state_dict(checkpoint['model_state_dict'])
+                    state_dict = checkpoint['model_state_dict']
                     logger.info(
                         f"Loaded checkpoint with AUC: "
                         f"{checkpoint.get('best_auc', 'N/A')}"
                     )
                 elif 'state_dict' in checkpoint:
-                    self.model.load_state_dict(checkpoint['state_dict'])
+                    state_dict = checkpoint['state_dict']
                 else:
                     # Assume the dict is the state_dict itself
-                    self.model.load_state_dict(checkpoint)
+                    state_dict = checkpoint
             else:
                 # Direct state dict
-                self.model.load_state_dict(checkpoint)
+                state_dict = checkpoint
             
+            # 🔥 Add 'backbone.' prefix if missing (handles models trained before wrapper)
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                if key.startswith('backbone.'):
+                    new_state_dict[key] = value
+                else:
+                    new_state_dict[f'backbone.{key}'] = value
+            
+            # Use strict=False to ignore any remaining mismatches
+            self.model.load_state_dict(new_state_dict, strict=False)
             self.model.to(self.device)
             self.model.eval()
             
@@ -190,6 +209,61 @@ class AadhaarForgeryDetector:
                 f"Could not load Aadhaar model from {self.model_path}. "
                 f"Error: {str(e)}"
             ) from e
+    
+    def _assess_image_quality(self, img: Image.Image) -> tuple[float, List[str]]:
+        """
+        🆕 NEW: Assess image quality and return score + warnings.
+        
+        Args:
+            img: PIL Image
+        
+        Returns:
+            (quality_score, warnings) tuple
+            - quality_score: 0-1 (1 = perfect quality)
+            - warnings: List of quality issues detected
+        """
+        warnings = []
+        quality_score = 1.0
+        
+        # Convert to OpenCV format for analysis
+        img_np = np.array(img.convert('RGB'))
+        img_cv = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+        gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+        
+        # 1. Check resolution
+        width, height = img.size
+        if width < 600 or height < 400:
+            warnings.append("⚠️ Low resolution - image may lack detail")
+            quality_score -= 0.2
+        
+        # 2. Check brightness
+        stat = ImageStat.Stat(img.convert('L'))
+        brightness = stat.mean[0]
+        if brightness < 60:
+            warnings.append("🌑 Too dark - poor lighting conditions")
+            quality_score -= 0.25
+        elif brightness > 220:
+            warnings.append("☀️ Overexposed - too bright")
+            quality_score -= 0.2
+        
+        # 3. Check blur (Laplacian variance)
+        laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+        if laplacian_var < 100:
+            warnings.append("📸 Blurry image - focus issue detected")
+            quality_score -= 0.3
+        
+        # 4. Check contrast
+        contrast = stat.stddev[0]
+        if contrast < 30:
+            warnings.append("🔳 Low contrast - flat image")
+            quality_score -= 0.15
+        
+        quality_score = max(quality_score, 0.0)
+        
+        if quality_score < 0.6:
+            warnings.insert(0, "‼️ Poor image quality detected - consider retaking photo")
+        
+        return quality_score, warnings
     
     def _predict_probabilities(self, img: Image.Image) -> tuple[float, float]:
         """
@@ -216,19 +290,21 @@ class AadhaarForgeryDetector:
     
     def analyze(self, image_path: PathLike) -> AadhaarVerificationResult:
         """
-        Analyze Aadhaar card image for forgery.
+        Analyze Aadhaar card image for forgery with quality assessment.
         
         Args:
             image_path: Path to Aadhaar card image
         
         Returns:
-            AadhaarVerificationResult with verdict and probabilities
+            AadhaarVerificationResult with verdict, probabilities, and quality info
         
         Example:
             >>> result = detector.analyze("aadhaar.jpg")
             >>> if result.is_forged():
             ...     print(f"Warning: Forged document detected!")
             ...     print(f"Confidence: {result.confidence:.2%}")
+            >>> if result.quality_warnings:
+            ...     print("Quality issues:", result.quality_warnings)
         """
         image_path = str(image_path)
         
@@ -238,18 +314,29 @@ class AadhaarForgeryDetector:
             logger.error(f"Failed to load image {image_path}: {e}")
             raise ValueError(f"Could not open image: {image_path}") from e
         
+        # 🆕 Assess image quality
+        quality_score, quality_warnings = self._assess_image_quality(pil_img)
+        
+        # 🆕 Adaptive threshold based on quality
+        if self.adaptive_threshold and quality_score < 0.6:
+            effective_threshold = self.MODEL_CONFIG["threshold_low_quality"]
+            logger.info(f"Low quality image detected (score={quality_score:.2f}), using lenient threshold={effective_threshold}")
+        else:
+            effective_threshold = self.threshold
+        
         # Get predictions
         forged_prob, authentic_prob = self._predict_probabilities(pil_img)
         
         # Determine verdict
-        is_forged = authentic_prob < self.threshold
+        is_forged = authentic_prob < effective_threshold
         verdict = "FORGED" if is_forged else "AUTHENTIC"
         confidence = max(forged_prob, authentic_prob)
         
         logger.info(
             f"Aadhaar analysis: {Path(image_path).name} → "
             f"{verdict} (conf={confidence:.3f}, "
-            f"auth={authentic_prob:.3f}, forged={forged_prob:.3f})"
+            f"auth={authentic_prob:.3f}, forged={forged_prob:.3f}, "
+            f"quality={quality_score:.2f}, threshold={effective_threshold})"
         )
         
         return AadhaarVerificationResult(
@@ -259,7 +346,9 @@ class AadhaarForgeryDetector:
             confidence=confidence,
             authentic_probability=authentic_prob,
             forged_probability=forged_prob,
-            threshold=self.threshold
+            threshold=effective_threshold,
+            quality_score=quality_score,
+            quality_warnings=quality_warnings
         )
     
     def analyze_batch(
@@ -300,5 +389,6 @@ class AadhaarForgeryDetector:
             "model_type": "AadhaarForgeryDetector",
             "model_path": str(self.model_path),
             "device": str(self.device),
+            "adaptive_threshold": self.adaptive_threshold,
             "config": self.MODEL_CONFIG
         }

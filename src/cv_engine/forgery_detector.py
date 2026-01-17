@@ -20,8 +20,9 @@ from .forgery_utils import ForgeryUtils
 
 PathLike = Union[str, Path]
 
-DEFAULT_MODEL_PATH = Path("models/forgery_detector_latest_run.pth")
-DEFAULT_CONFIG_PATH = Path("models/forgery_detector_latest_run_config.json")
+# 🔧 FIX: Updated path to forgery_detection subdirectory
+DEFAULT_MODEL_PATH = Path("models/forgery_detection/forgery_detector_latest_run.pth")
+DEFAULT_CONFIG_PATH = Path("models/forgery_detection/forgery_detector_latest_run_config.json")
 
 
 @dataclass
@@ -105,16 +106,26 @@ class ForgeryDetector:
         logger.info(f"Loaded config: threshold={self.threshold}, size={self.input_size}")
 
     def _load_model(self) -> None:
-        """Load trained ResNet50 model weights"""
+        """Load trained ResNet50 model weights with automatic key remapping"""
         if not self.model_path.exists():
             raise FileNotFoundError(
                 f"Model file not found: {self.model_path}. "
-                f"Please place the .pth file in the models/ directory."
+                f"Please place the .pth file in the models/forgery_detection/ directory."
             )
 
         self.model = ForgeryDetectorCNN(pretrained=False)
         state = torch.load(self.model_path, map_location=self.device)
-        self.model.load_state_dict(state)
+        
+        # 🔥 Add 'backbone.' prefix if missing (handles models trained before wrapper)
+        new_state = {}
+        for key, value in state.items():
+            if key.startswith('backbone.'):
+                new_state[key] = value
+            else:
+                new_state[f'backbone.{key}'] = value
+        
+        # Use strict=False to ignore any remaining mismatches
+        self.model.load_state_dict(new_state, strict=False)
         self.model.to(self.device)
         self.model.eval()
 
