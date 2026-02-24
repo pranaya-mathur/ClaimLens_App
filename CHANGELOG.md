@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.1.0] - 2025-12-14
 
-### ✨ Added
+### Added
 - **Generic Document Verification** tab in Streamlit dashboard
   - Support for Driving License, Passport, Voter ID
   - Support for Bank Statements, Hospital Bills, Death Certificates
@@ -18,12 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CHANGELOG.md for version tracking
 - Professional repository structure
 
-### 🔧 Changed
+### Changed
 - Cleaned up frontend directory (removed 5 old Streamlit files)
 - Consolidated all working features into single `streamlit_app.py`
 - Updated documentation structure
 
-### 🐛 Fixed
+### Fixed
 - Generic Forgery Detector now accessible via UI (was backend-only)
 - Frontend file confusion resolved
 
@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.0] - 2025-12-13
 
-### ✨ Added
+### Added
 - **Multi-Modal Fraud Detection System**
   - ML Engine: CatBoost-based fraud scoring
   - CV Engine: Document verification (PAN, Aadhaar)
@@ -47,12 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Adaptive Risk Weighting** based on component confidence
 - **Critical Flags Detection** for high-risk indicators
 
-### 🔧 Changed
+### Changed
 - Migrated from monolithic to modular engine architecture
 - Enhanced ML model with PCA embeddings (768 → 100 dims)
 - Improved document verification with 3-model ensemble
 
-### 🐛 Fixed
+### Fixed
 - **Critical Bug #1**: Fixed ML embedding model (wrong dimensions)
 - **Critical Bug #2**: Fixed CV model file extensions (.pth → .pt)
 - **Critical Bug #3**: Added .cbm to .gitignore
@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0] - 2025-11-30
 
-### ✨ Added
+### Added
 - Initial release of ClaimLens AI
 - Basic fraud detection using CatBoost
 - Simple document verification

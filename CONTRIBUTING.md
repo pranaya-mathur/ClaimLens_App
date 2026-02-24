@@ -1,12 +1,12 @@
 # Contributing to ClaimLens AI
 
-Thank you for your interest in contributing to ClaimLens AI! 🎉
+Thank you for your interest in contributing to ClaimLens AI!
 
 We welcome contributions from the community, whether it's bug reports, feature requests, documentation improvements, or code contributions.
 
 ---
 
-## 📜 Table of Contents
+## Table of Contents
 
 - [Code of Conduct](#code-of-conduct)
 - [How Can I Contribute?](#how-can-i-contribute)
@@ -18,15 +18,15 @@ We welcome contributions from the community, whether it's bug reports, feature r
 
 ---
 
-## 🤝 Code of Conduct
+## Code of Conduct
 
 By participating in this project, you agree to abide by our Code of Conduct (coming soon). Please be respectful and constructive in all interactions.
 
 ---
 
-## 🚀 How Can I Contribute?
+## How Can I Contribute?
 
-### Reporting Bugs 🐛
+### Reporting Bugs
 
 Before creating a bug report:
 1. **Check existing issues** to avoid duplicates
@@ -37,14 +37,14 @@ Before creating a bug report:
    - Screenshots/logs if applicable
    - Environment (OS, Python version, etc.)
 
-### Suggesting Features ✨
+### Suggesting Features
 
 1. **Search existing feature requests** first
 2. **Describe the feature** clearly
 3. **Explain the use case** and benefits
 4. **Consider implementation** if possible
 
-### Contributing Code 💻
+### Contributing Code
 
 We welcome:
 - Bug fixes
@@ -55,7 +55,7 @@ We welcome:
 
 ---
 
-## 🛠️ Development Setup
+## Development Setup
 
 ### Prerequisites
 
@@ -100,7 +100,7 @@ uvicorn api.main:app --reload
 
 ---
 
-## 🔄 Pull Request Process
+## Pull Request Process
 
 ### 1. Create a Branch
 
@@ -154,14 +154,14 @@ git push origin feature/your-feature-name
 
 ### 5. PR Review Process
 
-- 👀 Maintainers will review your PR
-- 💬 Address feedback and comments
-- ✅ Once approved, PR will be merged
-- 🎉 Congratulations, you're a contributor!
+- Maintainers will review your PR
+- Address feedback and comments
+- Once approved, PR will be merged
+- Congratulations, you're a contributor!
 
 ---
 
-## 🎨 Coding Standards
+## Coding Standards
 
 ### Python Style
 
@@ -201,7 +201,7 @@ src/
 
 ---
 
-## 🧪 Testing Guidelines
+## Testing Guidelines
 
 ### Run Tests
 
@@ -234,7 +234,7 @@ def test_fraud_detection():
 
 ---
 
-## 📝 Documentation
+## Documentation
 
 ### Update Documentation
 
@@ -253,24 +253,24 @@ When adding features:
 
 ---
 
-## 🎯 Areas for Contribution
+## Areas for Contribution
 
 ### High Priority
-- ✅ Unit test coverage improvement
-- ✅ Performance optimization
-- ✅ Documentation enhancements
-- ✅ Bug fixes
+- Unit test coverage improvement
+- Performance optimization
+- Documentation enhancements
+- Bug fixes
 
 ### Feature Ideas
-- 💡 Batch processing API
-- 💡 PDF document support
-- 💡 Multi-language support
-- 💡 Real-time monitoring dashboard
-- 💡 Enhanced visualization
+- Batch processing API
+- PDF document support
+- Multi-language support
+- Real-time monitoring dashboard
+- Enhanced visualization
 
 ---
 
-## ❓ Questions?
+## Questions?
 
 If you have questions:
 - Check [Documentation](docs/README.md)
@@ -279,10 +279,10 @@ If you have questions:
 
 ---
 
-## 🚀 Thank You!
+## Thank You!
 
-Your contributions make ClaimLens AI better for everyone. We appreciate your time and effort! 🙏
+Your contributions make ClaimLens AI better for everyone. We appreciate your time and effort!
 
 ---
 
-**Happy Coding!** 🎉
+**Happy Coding!**
