@@ -1,7 +1,7 @@
 """ 
 ClaimLens AI - Comprehensive Fraud Detection Dashboard
 Enhanced UI with Document Upload & Multi-Modal Analysis
-✅ STABLE VERSION - Individual API endpoints (NOT unified)
+STABLE VERSION - Individual API endpoints (NOT unified)
 """
 import streamlit as st
 import requests
@@ -19,7 +19,7 @@ API_URL = "http://localhost:8000"
 
 st.set_page_config(
     page_title="ClaimLens AI - Fraud Detection",
-    page_icon="🤖",
+    page_icon="robot",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -99,41 +99,41 @@ def create_radar_chart(scores):
 def get_risk_color(risk_level):
     """Return color based on risk level"""
     colors = {
-        "LOW": "🟢",
-        "MEDIUM": "🟡",
-        "HIGH": "🟠",
-        "CRITICAL": "🔴"
+        "LOW": "[GREEN]",
+        "MEDIUM": "[YELLOW]",
+        "HIGH": "[ORANGE]",
+        "CRITICAL": "[RED]"
     }
-    return colors.get(risk_level, "⚪")
+    return colors.get(risk_level, "[WHITE]")
 
 # Sidebar
 with st.sidebar:
-    st.markdown("### 🤖 AI Status")
+    st.markdown("### AI Status")
     
     # Check API health
     try:
         health_response = requests.get(f"{API_URL}/health/liveness", timeout=2)
         if health_response.status_code == 200:
-            st.success("✅ Models Active")
+            st.success("Models Active")
         else:
-            st.error("❌ API Down")
+            st.error("API Down")
     except:
-        st.error("❌ Cannot connect to API")
+        st.error("Cannot connect to API")
     
     st.markdown("---")
-    st.markdown("### 📋 v2.0 Features:")
+    st.markdown("### v2.0 Features:")
     st.markdown("""
-    - ✅ Semantic Verdicts
-    - ✅ Critical Flags
-    - ✅ Reasoning Chain
-    - ✅ LLM Explanations
-    - ✅ Adaptive Weighting
-    - ✅ Network Analysis
-    - ✅ Generic Doc Verify  🆕
+    - Semantic Verdicts
+    - Critical Flags
+    - Reasoning Chain
+    - LLM Explanations
+    - Adaptive Weighting
+    - Network Analysis
+    - Generic Doc Verify [NEW]
     """)
     
     st.markdown("---")
-    st.markdown("### ℹ️ About This Version")
+    st.markdown("### About This Version")
     st.markdown("""
     **STABLE BUILD** - Uses individual API endpoints
     
@@ -142,44 +142,44 @@ with st.sidebar:
     • Graph Engine: Network analysis
     • LLM Engine: Groq explanations
     
-    ✅ All modules verified and working
+    All modules verified and working
     """)
     
     st.markdown("---")
     page = st.radio(
         "Navigate",
         [
-            "🎯 AI-Powered Claim Analysis",
-            "📄 Generic Document Verification",  # NEW!
-            "📊 Analytics Dashboard",
-            "🕸️ Fraud Networks"
+            "AI-Powered Claim Analysis",
+            "Generic Document Verification",
+            "Analytics Dashboard",
+            "Fraud Networks"
         ]
     )
 
 # Page 1: AI-Powered Claim Analysis
 if "AI-Powered" in page:
-    st.markdown('<p class="main-header">🤖 ClaimLens AI</p>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">✨ Explainable AI Fraud Detection | Powered by Groq + Llama-3.3-70B</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-header">ClaimLens AI</p>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">Explainable AI Fraud Detection | Powered by Groq + Llama-3.3-70B</p>', unsafe_allow_html=True)
     st.markdown("---")
     
-    st.markdown("## 🎯 AI-Powered Claim Analysis")
+    st.markdown("## AI-Powered Claim Analysis")
     
     # Claim Information Form
-    with st.expander("📋 Enter Claim Information", expanded=True):
+    with st.expander("Enter Claim Information", expanded=True):
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            claim_id = st.text_input("🔖 Claim ID", value="CLM2024001", help="Unique claim identifier")
+            claim_id = st.text_input("Claim ID", value="CLM2024001", help="Unique claim identifier")
         
         with col2:
             claim_subtype = st.selectbox(
-                "📦 Claim Subtype",
+                "Claim Subtype",
                 ["accident", "theft", "fire", "natural_disaster", "mechanical", "vandalism"]
             )
         
         with col3:
             premium = st.number_input(
-                "💰 Premium (₹)",
+                "Premium (Rs)",
                 min_value=1000,
                 max_value=100000,
                 value=15000,
@@ -187,19 +187,19 @@ if "AI-Powered" in page:
             )
         
         with col4:
-            claimant_id = st.text_input("👤 Claimant ID", value="CLMT12345")
+            claimant_id = st.text_input("Claimant ID", value="CLMT12345")
         
         col5, col6, col7, col8 = st.columns(4)
         
         with col5:
             product_type = st.selectbox(
-                "🚗 Product Type",
+                "Product Type",
                 ["motor", "health", "life", "property"]
             )
         
         with col6:
             claim_amount = st.number_input(
-                "💵 Claim Amount (₹)",
+                "Claim Amount (Rs)",
                 min_value=1000,
                 max_value=10000000,
                 value=250000,
@@ -208,7 +208,7 @@ if "AI-Powered" in page:
         
         with col7:
             days_since_policy = st.number_input(
-                "📅 Days Since Policy",
+                "Days Since Policy",
                 min_value=0,
                 max_value=3650,
                 value=45,
@@ -217,14 +217,14 @@ if "AI-Powered" in page:
         
         with col8:
             documents_list = st.text_input(
-                "📄 Documents",
+                "Documents",
                 value="pan,aadhaar,rc,dl",
                 help="Comma-separated document types"
             )
         
         # Narrative
         narrative = st.text_area(
-            "📝 Claim Narrative (Hinglish supported)",
+            "Claim Narrative (Hinglish supported)",
             value="Meri gaadi ko accident ho gaya tha highway pe. Front bumper aur headlight damage hai.",
             height=100,
             help="Describe the claim incident in English or Hinglish"
@@ -233,12 +233,12 @@ if "AI-Powered" in page:
     st.markdown("---")
     
     # Document Upload Section
-    st.markdown("## 📤 Upload Documents for Verification")
+    st.markdown("## Upload Documents for Verification")
     
     doc_col1, doc_col2, doc_col3 = st.columns(3)
     
     with doc_col1:
-        st.markdown("### 🆔 PAN Card")
+        st.markdown("### PAN Card")
         pan_file = st.file_uploader(
             "Upload PAN Card",
             type=["jpg", "jpeg", "png", "pdf"],
@@ -249,7 +249,7 @@ if "AI-Powered" in page:
             st.image(pan_file, use_container_width=True)
     
     with doc_col2:
-        st.markdown("### 🪪 Aadhaar Card")
+        st.markdown("### Aadhaar Card")
         aadhaar_file = st.file_uploader(
             "Upload Aadhaar Card",
             type=["jpg", "jpeg", "png", "pdf"],
@@ -260,7 +260,7 @@ if "AI-Powered" in page:
             st.image(aadhaar_file, use_container_width=True)
     
     with doc_col3:
-        st.markdown("### 🚗 Vehicle/Damage Photo")
+        st.markdown("### Vehicle/Damage Photo")
         vehicle_file = st.file_uploader(
             "Upload Vehicle Image",
             type=["jpg", "jpeg", "png"],
@@ -273,8 +273,8 @@ if "AI-Powered" in page:
     st.markdown("---")
     
     # Analyze Button
-    if st.button("🔬 Analyze with AI", type="primary", use_container_width=True):
-        with st.spinner("🤖 AI is analyzing your claim..."):
+    if st.button("Analyze with AI", type="primary", use_container_width=True):
+        with st.spinner("AI is analyzing your claim..."):
             # Initialize results
             results = {
                 "document_verification": None,
@@ -284,12 +284,12 @@ if "AI-Powered" in page:
             }
             
             # 1. Component Risk Analysis
-            st.markdown("### 📋 Component Risk Analysis")
+            st.markdown("### Component Risk Analysis")
             comp_col1, comp_col2, comp_col3 = st.columns(3)
             
             # Document Verification
             with comp_col1:
-                st.markdown("#### ⚠️ Document Verification")
+                st.markdown("#### Document Verification")
                 if pan_file or aadhaar_file:
                     try:
                         # Analyze PAN
@@ -310,9 +310,9 @@ if "AI-Powered" in page:
                                 confidence = pan_result.get("confidence", 0) * 100
                                 
                                 if risk == "SUSPICIOUS":
-                                    st.error(f"🔴 {risk}")
+                                    st.error(f"[RED] {risk}")
                                 else:
-                                    st.success(f"🟢 {risk}")
+                                    st.success(f"[GREEN] {risk}")
                                 
                                 st.metric("Confidence", f"{confidence:.0f}%")
                                 st.caption(pan_result.get("recommendation", "No recommendation"))
@@ -334,9 +334,9 @@ if "AI-Powered" in page:
                                 confidence = aadhaar_result.get("confidence", 0) * 100
                                 
                                 if risk == "SUSPICIOUS":
-                                    st.error(f"🔴 {risk}")
+                                    st.error(f"[RED] {risk}")
                                 else:
-                                    st.success(f"🟢 {risk}")
+                                    st.success(f"[GREEN] {risk}")
                                 
                                 st.metric("Confidence", f"{confidence:.0f}%")
                                 st.caption(aadhaar_result.get("recommendation", "No recommendation"))
@@ -348,7 +348,7 @@ if "AI-Powered" in page:
             
             # ML Fraud Score
             with comp_col2:
-                st.markdown("#### 🔴 ML Fraud Score")
+                st.markdown("#### ML Fraud Score")
                 try:
                     ml_payload = {
                         "claim_id": claim_id,
@@ -378,11 +378,11 @@ if "AI-Powered" in page:
                         risk_level = ml_result.get("risk_level", "UNKNOWN")
                         
                         if risk_level in ["HIGH", "CRITICAL"]:
-                            st.error(f"🔴 {risk_level}")
+                            st.error(f"[RED] {risk_level}")
                         elif risk_level == "MEDIUM":
-                            st.warning(f"🟡 {risk_level}")
+                            st.warning(f"[YELLOW] {risk_level}")
                         else:
-                            st.success(f"🟢 {risk_level}")
+                            st.success(f"[GREEN] {risk_level}")
                         
                         st.metric("Fraud Probability", f"{fraud_prob:.0f}%")
                         st.caption(f"ML confidence: {fraud_prob:.1f}%")
@@ -394,11 +394,11 @@ if "AI-Powered" in page:
             
             # Graph Analysis - FIXED: Send claim_id as string
             with comp_col3:
-                st.markdown("#### 🕸️ Graph Analysis")
+                st.markdown("#### Graph Analysis")
                 try:
                     graph_response = requests.post(
                         f"{API_URL}/api/fraud/score",
-                        json={"claim_id": claim_id},  # ✅ FIXED: Send as string directly
+                        json={"claim_id": claim_id},
                         timeout=10
                     )
                     
@@ -410,9 +410,9 @@ if "AI-Powered" in page:
                         fraud_count = insights.get("neighbor_fraud_count", 0)
                         
                         if fraud_count > 0:
-                            st.warning(f"⚠️ {fraud_count} fraud connections")
+                            st.warning(f"[WARN] {fraud_count} fraud connections")
                         else:
-                            st.success("🟢 CLEAN")
+                            st.success("[GREEN] CLEAN")
                         
                         st.metric("Network Score", "88%")
                         st.caption("No fraud network detected" if fraud_count == 0 else f"{fraud_count} suspicious connections")
@@ -427,7 +427,7 @@ if "AI-Powered" in page:
             st.markdown("---")
             
             # Radar Chart
-            st.markdown("### 📊 Risk Component Visualization")
+            st.markdown("### Risk Component Visualization")
             radar_col1, radar_col2 = st.columns([2, 1])
             
             with radar_col1:
@@ -456,22 +456,22 @@ if "AI-Powered" in page:
                 st.plotly_chart(fig_radar, use_container_width=True)
             
             with radar_col2:
-                st.markdown("#### 🎯 Final Assessment")
+                st.markdown("#### Final Assessment")
                 
                 # Calculate weighted risk
                 final_risk = (ml_score_val * 0.4 + doc_score * 0.3 + graph_score * 0.3)
                 
                 if final_risk >= 70:
-                    st.error(f"🔴 CRITICAL RISK")
+                    st.error(f"[RED] CRITICAL RISK")
                     recommendation = "REJECT - High fraud probability"
                 elif final_risk >= 50:
-                    st.warning(f"🟠 HIGH RISK")
+                    st.warning(f"[ORANGE] HIGH RISK")
                     recommendation = "REVIEW - Manual inspection required"
                 elif final_risk >= 30:
-                    st.info(f"🟡 MEDIUM RISK")
+                    st.info(f"[YELLOW] MEDIUM RISK")
                     recommendation = "REVIEW - Additional verification needed"
                 else:
-                    st.success(f"🟢 LOW RISK")
+                    st.success(f"[GREEN] LOW RISK")
                     recommendation = "APPROVE - Low fraud indicators"
                 
                 st.metric("Risk Score", f"{final_risk:.0f}%")
@@ -491,8 +491,8 @@ if "AI-Powered" in page:
             st.markdown("---")
             
             # LLM Explanation
-            st.markdown("### 🧠 AI-Generated Explanation")
-            st.markdown("#### 🎯 Explanation for: **Adjuster (Technical)**")
+            st.markdown("### AI-Generated Explanation")
+            st.markdown("#### Explanation for: **Adjuster (Technical)**")
             
             # Generate LLM explanation if available
             try:
@@ -524,8 +524,8 @@ if "AI-Powered" in page:
             # Fallback explanation if LLM fails
             if not explanation or explanation.startswith("Could not") or explanation.startswith("LLM"):
                 explanation = f"""
-This claim requires manual review due to several risk factors. The claim amount of ₹{claim_amount:,} against 
-a premium of ₹{premium:,} represents a {claim_amount/premium:.0f}x ratio, which is significantly higher than average. 
+This claim requires manual review due to several risk factors. The claim amount of Rs {claim_amount:,} against 
+a premium of Rs {premium:,} represents a {claim_amount/premium:.0f}x ratio, which is significantly higher than average. 
 Additionally, the claim was filed just {days_since_policy} days after policy inception, which statistically correlates 
 with higher fraud risk.
 
@@ -539,25 +539,25 @@ We recommend verifying the claimant's history and authenticating all submitted d
 
 # Page 2: Generic Document Verification (NEW!)
 elif "Generic Document" in page:
-    st.markdown('<p class="main-header">📄 Generic Document Verification</p>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">🔍 AI-Powered Forgery Detection for All Document Types</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-header">Generic Document Verification</p>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">AI-Powered Forgery Detection for All Document Types</p>', unsafe_allow_html=True)
     st.markdown("---")
     
     st.markdown("""
-    ## 🎯 What Can This Verify?
+    ## What Can This Verify?
     
     This tool uses our **Generic Forgery Detector** (ResNet50 + ELA + Noise Analysis) to detect:
-    - ✅ Digital tampering and photoshop edits
-    - ✅ Copy-paste forgeries  
-    - ✅ JPEG compression artifacts
-    - ✅ Print-scan-modify patterns
-    - ✅ Quality inconsistencies
+    - Digital tampering and photoshop edits
+    - Copy-paste forgeries  
+    - JPEG compression artifacts
+    - Print-scan-modify patterns
+    - Quality inconsistencies
     """)
     
     st.markdown("---")
     
     # Document type selection
-    st.markdown("### 📋 Select Document Type")
+    st.markdown("### Select Document Type")
     
     doc_type_col1, doc_type_col2 = st.columns(2)
     
@@ -574,13 +574,13 @@ elif "Generic Document" in page:
                 "other"
             ],
             format_func=lambda x: {
-                "license": "🚗 Driving License",
-                "passport": "✈️ Passport",
-                "voter_id": "🗳️ Voter ID",
-                "bank_statement": "🏦 Bank Statement",
-                "hospital_bill": "🏥 Hospital Bill",
-                "death_certificate": "⚰️ Death Certificate",
-                "other": "📎 Other Document"
+                "license": "Driving License",
+                "passport": "Passport",
+                "voter_id": "Voter ID",
+                "bank_statement": "Bank Statement",
+                "hospital_bill": "Hospital Bill",
+                "death_certificate": "Death Certificate",
+                "other": "Other Document"
             }[x]
         )
     
@@ -591,7 +591,7 @@ elif "Generic Document" in page:
     st.markdown("---")
     
     # File upload
-    st.markdown("### 📤 Upload Document")
+    st.markdown("### Upload Document")
     
     uploaded_file = st.file_uploader(
         f"Upload {document_type.replace('_', ' ').title()} Image",
@@ -607,7 +607,7 @@ elif "Generic Document" in page:
             st.image(uploaded_file, caption="Uploaded Document", use_container_width=True)
         
         with col2:
-            st.markdown("#### 📊 File Info")
+            st.markdown("#### File Info")
             file_size = len(uploaded_file.getvalue()) / (1024 * 1024)
             st.metric("File Size", f"{file_size:.2f} MB")
             st.metric("Format", uploaded_file.type.split('/')[-1].upper())
@@ -616,8 +616,8 @@ elif "Generic Document" in page:
         st.markdown("---")
         
         # Analyze button
-        if st.button("🔬 Analyze Document", type="primary", use_container_width=True):
-            with st.spinner("🤖 AI is analyzing the document..."):
+        if st.button("Analyze Document", type="primary", use_container_width=True):
+            with st.spinner("AI is analyzing the document..."):
                 try:
                     # Reset file pointer
                     uploaded_file.seek(0)
@@ -638,7 +638,7 @@ elif "Generic Document" in page:
                         result = response.json()
                         
                         # Display results
-                        st.markdown("### ✅ Analysis Complete")
+                        st.markdown("### Analysis Complete")
                         st.markdown("---")
                         
                         # Main verdict
@@ -647,9 +647,9 @@ elif "Generic Document" in page:
                         with verdict_col1:
                             is_valid = result.get("is_valid", False)
                             if is_valid:
-                                st.success("✅ AUTHENTIC")
+                                st.success("AUTHENTIC")
                             else:
-                                st.error("🔴 SUSPICIOUS")
+                                st.error("[RED] SUSPICIOUS")
                             
                             st.metric(
                                 "Verdict",
@@ -673,11 +673,11 @@ elif "Generic Document" in page:
                             st.metric("Risk Score", f"{risk_score:.1f}%")
                             
                             if risk_score >= 60:
-                                st.error("🔴 HIGH RISK")
+                                st.error("[RED] HIGH RISK")
                             elif risk_score >= 40:
-                                st.warning("🟡 MEDIUM RISK")
+                                st.warning("[YELLOW] MEDIUM RISK")
                             else:
-                                st.success("🟢 LOW RISK")
+                                st.success("[GREEN] LOW RISK")
                         
                         st.markdown("---")
                         
@@ -685,66 +685,66 @@ elif "Generic Document" in page:
                         detail_col1, detail_col2 = st.columns(2)
                         
                         with detail_col1:
-                            st.markdown("#### 🔍 Validation Checks")
+                            st.markdown("#### Validation Checks")
                             validation_checks = result.get("validation_checks", {})
                             
                             for check, passed in validation_checks.items():
                                 if isinstance(passed, bool):
-                                    icon = "✅" if passed else "❌"
+                                    icon = "[PASS]" if passed else "[FAIL]"
                                     st.write(f"{icon} {check.replace('_', ' ').title()}")
                                 else:
-                                    st.write(f"📊 {check.replace('_', ' ').title()}: {passed}")
+                                    st.write(f"[INFO] {check.replace('_', ' ').title()}: {passed}")
                         
                         with detail_col2:
-                            st.markdown("#### ⚠️ Red Flags Detected")
+                            st.markdown("#### Red Flags Detected")
                             red_flags = result.get("red_flags", [])
                             
                             if red_flags:
                                 for flag in red_flags:
-                                    st.warning(f"🚨 {flag}")
+                                    st.warning(f"[ALERT] {flag}")
                             else:
-                                st.success("✅ No red flags detected")
+                                st.success("No red flags detected")
                         
                         st.markdown("---")
                         
                         # Recommendation
-                        st.markdown("#### 🎯 Recommendation")
+                        st.markdown("#### Recommendation")
                         recommendation = result.get("recommendation", "No recommendation available")
                         
                         if "REJECT" in recommendation:
-                            st.error(f"🔴 {recommendation}")
+                            st.error(f"[RED] {recommendation}")
                         elif "REVIEW" in recommendation:
-                            st.warning(f"🟡 {recommendation}")
+                            st.warning(f"[YELLOW] {recommendation}")
                         else:
-                            st.success(f"🟢 {recommendation}")
+                            st.success(f"[GREEN] {recommendation}")
                         
                         # Technical details (expandable)
-                        with st.expander("🔧 Technical Details"):
+                        with st.expander("Technical Details"):
                             st.json(result)
                     
                     else:
-                        st.error(f"❌ API Error: {response.status_code}")
+                        st.error(f"API Error: {response.status_code}")
                         st.error(response.text)
                 
                 except Exception as e:
-                    st.error(f"❌ Analysis Failed: {str(e)}")
+                    st.error(f"Analysis Failed: {str(e)}")
                     st.info("Make sure the API server is running on http://localhost:8000")
     
     else:
-        st.info("👆 Upload a document to begin verification")
+        st.info("Upload a document to begin verification")
         
         # Show supported document examples
         st.markdown("---")
-        st.markdown("### 📚 Supported Documents")
+        st.markdown("### Supported Documents")
         
         doc_examples = {
-            "🚗 Driving License": "State-issued driver's licenses",
-            "✈️ Passport": "International passports",
-            "🗳️ Voter ID": "Electoral photo identity cards",
-            "🏦 Bank Statement": "Official bank statements and letters",
-            "🏥 Hospital Bill": "Medical bills and receipts",
-            "⚰️ Death Certificate": "Official death certificates",
-            "📎 Other": "Any other government/official document"
+            "Driving License": "State-issued driver's licenses",
+            "Passport": "International passports",
+            "Voter ID": "Electoral photo identity cards",
+            "Bank Statement": "Official bank statements and letters",
+            "Hospital Bill": "Medical bills and receipts",
+            "Death Certificate": "Official death certificates",
+            "Other": "Any other government/official document"
         }
         
         for doc_name, description in doc_examples.items():
@@ -752,7 +752,7 @@ elif "Generic Document" in page:
 
 # Page 3: Analytics Dashboard
 elif "Analytics" in page:
-    st.title("📊 Fraud Analytics Dashboard")
+    st.title("Fraud Analytics Dashboard")
     
     try:
         overview_response = requests.get(f"{API_URL}/api/analytics/overview", timeout=5)
@@ -765,7 +765,7 @@ elif "Analytics" in page:
             col1.metric("Total Claims", f"{overview.get('total_claims', 0):,}")
             col2.metric("Fraud Claims", f"{overview.get('fraud_claims', 0):,}", f"{overview.get('fraud_rate', '0')}%")
             col3.metric("Avg Fraud Score", f"{overview.get('avg_fraud_score', 0):.3f}")
-            col4.metric("Total Amount", f"₹{overview.get('total_amount', 0)/1000000:.1f}M")
+            col4.metric("Total Amount", f"Rs {overview.get('total_amount', 0)/1000000:.1f}M")
             
             st.markdown("---")
             
@@ -796,7 +796,7 @@ elif "Analytics" in page:
 
 # Page 4: Fraud Networks
 else:
-    st.title("🕸️ Fraud Network Analysis")
+    st.title("Fraud Network Analysis")
     
     tab1, tab2 = st.tabs(["Fraud Rings", "Serial Fraudsters"])
     
@@ -847,7 +847,7 @@ st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center; color: gray;'>
-        ClaimLens AI v2.1 | Multi-Modal Fraud Detection + Generic Document Verification | Built with ❤️ | STABLE BUILD
+        ClaimLens AI v2.1 | Multi-Modal Fraud Detection + Generic Document Verification | Built with Love | STABLE BUILD
     </div>
     """,
     unsafe_allow_html=True
